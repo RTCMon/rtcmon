@@ -12,8 +12,9 @@ type Config struct {
 	Server ServerConfig
 	DB     DBConfig
 	Redis  RedisConfig
-	Auth   AuthConfig
-	Worker WorkerConfig
+	Auth      AuthConfig
+	RateLimit RateLimitConfig
+	Worker    WorkerConfig
 	Log    LogConfig
 }
 
@@ -36,6 +37,11 @@ type RedisConfig struct {
 
 type AuthConfig struct {
 	JWTSecret string `mapstructure:"jwt_secret"`
+}
+
+type RateLimitConfig struct {
+	Max        int `mapstructure:"max"`
+	WindowSecs int `mapstructure:"window_secs"`
 }
 
 type WorkerConfig struct {
@@ -99,6 +105,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("db.conn_lifetime", "30m")
 
 	v.SetDefault("redis.pool_size", 10)
+
+	v.SetDefault("rate_limit.max", 100)
+	v.SetDefault("rate_limit.window_secs", 60)
 
 	v.SetDefault("worker.batch_size", 500)
 	v.SetDefault("worker.flush_interval_ms", 100)

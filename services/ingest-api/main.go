@@ -12,6 +12,7 @@ import (
 	"github.com/RTCMon/rtcmon/internal/db"
 	"github.com/RTCMon/rtcmon/internal/logger"
 	"github.com/RTCMon/rtcmon/internal/migrate"
+	"github.com/RTCMon/rtcmon/internal/ratelimit"
 	"github.com/RTCMon/rtcmon/services/ingest-api/server"
 )
 
@@ -62,7 +63,11 @@ func newServeCmd() *cobra.Command {
 			defer client.Close()
 
 			// Create and start HTTP server
-			srv := server.NewServer(ctx, pool, client, log, cfg.Auth.JWTSecret)
+			rl := ratelimit.New(client, ratelimit.Config{
+				Max:        cfg.RateLimit.Max,
+				WindowSecs: cfg.RateLimit.WindowSecs,
+			})
+			srv := server.NewServer(ctx, pool, client, log, cfg.Auth.JWTSecret, rl)
 			return srv.Listen(cfg.Server.Port)
 		},
 	}

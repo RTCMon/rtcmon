@@ -13,26 +13,29 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/RTCMon/rtcmon/internal/auth"
+	"github.com/RTCMon/rtcmon/internal/ratelimit"
 	"github.com/RTCMon/rtcmon/services/ingest-api/handler"
 )
 
 type Server struct {
-	router    *chi.Mux
-	db        *pgxpool.Pool
-	redis     *redis.Client
-	log       *logrus.Logger
-	jwtSecret string
+	router      *chi.Mux
+	db          *pgxpool.Pool
+	redis       *redis.Client
+	log         *logrus.Logger
+	jwtSecret   string
+	rateLimiter *ratelimit.RateLimiter
 }
 
-func NewServer(ctx context.Context, db *pgxpool.Pool, redis *redis.Client, log *logrus.Logger, jwtSecret string) *Server {
+func NewServer(ctx context.Context, db *pgxpool.Pool, redis *redis.Client, log *logrus.Logger, jwtSecret string, rl *ratelimit.RateLimiter) *Server {
 	r := chi.NewRouter()
 
 	s := &Server{
-		router:    r,
-		db:        db,
-		redis:     redis,
-		log:       log,
-		jwtSecret: jwtSecret,
+		router:      r,
+		db:          db,
+		redis:       redis,
+		log:         log,
+		jwtSecret:   jwtSecret,
+		rateLimiter: rl,
 	}
 
 	s.setupMiddleware()
@@ -54,6 +57,9 @@ func (s *Server) setupRoutes() {
 	// Protected routes — JWT required. Auth fires before the handler.
 	s.router.Group(func(r chi.Router) {
 		r.Use(auth.Authenticate(s.jwtSecret))
+		if s.rateLimiter != nil {
+			r.Use(s.rateLimiter.Middleware())
+		}
 		r.Post("/v1/events", handler.HandleEvents(s.log))
 	})
 }

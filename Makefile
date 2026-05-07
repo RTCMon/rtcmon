@@ -1,7 +1,14 @@
-.PHONY: build lint test test-short tidy migrate-up migrate-down migrate-create
+.PHONY: build build-api clean lint test test-short tidy migrate-up migrate-down migrate-create
 
 build:
 	go build ./...
+
+build-api:
+	mkdir -p bin
+	go build -o bin/ingest-api ./services/ingest-api
+
+clean:
+	rm -rf bin/
 
 lint:
 	golangci-lint run ./...

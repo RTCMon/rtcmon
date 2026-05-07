@@ -1,14 +1,18 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
 
+	"github.com/RTCMon/rtcmon/internal/cache"
 	"github.com/RTCMon/rtcmon/internal/config"
+	"github.com/RTCMon/rtcmon/internal/db"
 	"github.com/RTCMon/rtcmon/internal/logger"
 	"github.com/RTCMon/rtcmon/internal/migrate"
+	"github.com/RTCMon/rtcmon/services/ingest-api/server"
 )
 
 func main() {
@@ -41,8 +45,25 @@ func newServeCmd() *cobra.Command {
 			log := logger.New(cfg.Log.Level)
 			log.WithField("port", cfg.Server.Port).Info("ingest-api starting")
 
-			// HTTP server wiring goes here in BE-006.
-			return nil
+			ctx := context.Background()
+
+			// Initialize database pool
+			pool, err := db.NewPool(ctx, cfg.DB)
+			if err != nil {
+				return fmt.Errorf("db init: %w", err)
+			}
+			defer pool.Close()
+
+			// Initialize Redis client
+			client, err := cache.NewClient(ctx, cfg.Redis)
+			if err != nil {
+				return fmt.Errorf("redis init: %w", err)
+			}
+			defer client.Close()
+
+			// Create and start HTTP server
+			srv := server.NewServer(ctx, pool, client, log)
+			return srv.Listen(cfg.Server.Port)
 		},
 	}
 }

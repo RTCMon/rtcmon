@@ -3,6 +3,7 @@ package ratelimit
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -12,6 +13,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/redis/go-redis/v9"
+	"github.com/sirupsen/logrus"
 
 	"github.com/RTCMon/rtcmon/internal/auth"
 )
@@ -47,10 +49,14 @@ func newTestLimiter(t *testing.T, cfg Config) (*RateLimiter, *fakeClock) {
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
 
+	log := logrus.New()
+	log.SetOutput(io.Discard)
+
 	fc := &fakeClock{nowSecs: 1_000_000} // arbitrary fixed start
 	rl := &RateLimiter{
 		rdb:     rdb,
 		cfg:     cfg,
+		log:     log,
 		clockFn: fc.tick,
 	}
 	return rl, fc

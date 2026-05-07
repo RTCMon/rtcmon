@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/sirupsen/logrus"
 
 	"github.com/RTCMon/rtcmon/internal/auth"
 )
@@ -54,14 +55,16 @@ type Config struct {
 type RateLimiter struct {
 	rdb     *redis.Client
 	cfg     Config
+	log     *logrus.Logger
 	clockFn func() (nowSecs int64, uid string)
 }
 
 // New creates a RateLimiter with production defaults.
-func New(rdb *redis.Client, cfg Config) *RateLimiter {
+func New(rdb *redis.Client, cfg Config, log *logrus.Logger) *RateLimiter {
 	return &RateLimiter{
 		rdb:     rdb,
 		cfg:     cfg,
+		log:     log,
 		clockFn: defaultClock,
 	}
 }
@@ -85,6 +88,7 @@ func (rl *RateLimiter) Allow(ctx context.Context, appID string) (bool, error) {
 		uid,
 	).Int()
 	if err != nil {
+		rl.log.WithError(err).Warn("ratelimit: Redis eval failed, allowing request")
 		return true, err
 	}
 	return result == 1, nil

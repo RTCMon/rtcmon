@@ -62,7 +62,7 @@ func newServeCmd() *cobra.Command {
 			defer client.Close()
 
 			// Create and start HTTP server
-			srv := server.NewServer(ctx, pool, client, log)
+			srv := server.NewServer(ctx, pool, client, log, cfg.Auth.JWTSecret)
 			return srv.Listen(cfg.Server.Port)
 		},
 	}

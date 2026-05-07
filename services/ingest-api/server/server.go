@@ -12,24 +12,27 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
 
+	"github.com/RTCMon/rtcmon/internal/auth"
 	"github.com/RTCMon/rtcmon/services/ingest-api/handler"
 )
 
 type Server struct {
-	router *chi.Mux
-	db     *pgxpool.Pool
-	redis  *redis.Client
-	log    *logrus.Logger
+	router    *chi.Mux
+	db        *pgxpool.Pool
+	redis     *redis.Client
+	log       *logrus.Logger
+	jwtSecret string
 }
 
-func NewServer(ctx context.Context, db *pgxpool.Pool, redis *redis.Client, log *logrus.Logger) *Server {
+func NewServer(ctx context.Context, db *pgxpool.Pool, redis *redis.Client, log *logrus.Logger, jwtSecret string) *Server {
 	r := chi.NewRouter()
 
 	s := &Server{
-		router: r,
-		db:     db,
-		redis:  redis,
-		log:    log,
+		router:    r,
+		db:        db,
+		redis:     redis,
+		log:       log,
+		jwtSecret: jwtSecret,
 	}
 
 	s.setupMiddleware()
@@ -45,7 +48,14 @@ func (s *Server) setupMiddleware() {
 }
 
 func (s *Server) setupRoutes() {
+	// Public routes — no auth required.
 	s.router.Get("/health", handler.HandleHealth(s.db, s.redis, s.log))
+
+	// Protected routes — JWT required. Auth fires before the handler.
+	s.router.Group(func(r chi.Router) {
+		r.Use(auth.Authenticate(s.jwtSecret))
+		r.Post("/v1/events", handler.HandleEvents(s.log))
+	})
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {

@@ -1,162 +1,225 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/sirupsen/logrus"
+
+	"github.com/RTCMon/rtcmon/internal/auth"
+	"github.com/RTCMon/rtcmon/internal/model"
 )
 
-// TestRequestID_Present verifies that every request gets a unique X-Request-ID header
-func TestRequestID_Present(t *testing.T) {
+const testSecret = "test-secret-key"
+
+func newTestServer() *Server {
 	log := logrus.New()
 	log.SetOutput(io.Discard)
+	return NewServer(nil, nil, nil, log, testSecret)
+}
 
-	// Create a test server with a new router
-	srv := NewServer(nil, nil, nil, log)
+// makeValidToken generates a signed HS256 JWT with all required claims.
+func makeValidToken(t *testing.T, secret string) string {
+	t.Helper()
+	claims := auth.Claims{}
+	claims.AppID = "app-1"
+	claims.ConferenceID = "conf-1"
+	claims.UserID = "user-1"
+	claims.ExpiresAt = jwt.NewNumericDate(time.Now().Add(time.Hour))
 
-	req := httptest.NewRequest("GET", "/test", nil)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signed, err := token.SignedString([]byte(secret))
+	if err != nil {
+		t.Fatalf("sign token: %v", err)
+	}
+	return signed
+}
+
+func validEventsBody(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	p := model.IngestPayload{
+		ConferenceID: "conf-1",
+		SessionID:    "sess-1",
+		ConnectionID: "conn-1",
+		Events:       []model.StatSnapshot{{TS: 1_000_000}},
+	}
+	b, err := json.Marshal(p)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	return bytes.NewBuffer(b)
+}
+
+// --- Auth wiring tests ---
+
+func TestIngestRoute_NoAuth(t *testing.T) {
+	srv := newTestServer()
+	req := httptest.NewRequest(http.MethodPost, "/v1/events", validEventsBody(t))
+	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
-
-	// Use the router directly with test endpoint
-	testRouter := srv.router
-	testRouter.Get("/test", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"message": "ok"})
-	})
 
 	srv.ServeHTTP(w, req)
 
-	requestID := w.Header().Get("X-Request-ID")
-	if requestID == "" {
-		t.Errorf("expected X-Request-ID header to be present")
-	}
-
-	// Make another request and verify it has a different ID
-	req2 := httptest.NewRequest("GET", "/test", nil)
-	w2 := httptest.NewRecorder()
-
-	srv.ServeHTTP(w2, req2)
-
-	requestID2 := w2.Header().Get("X-Request-ID")
-	if requestID2 == "" {
-		t.Errorf("expected X-Request-ID header to be present on second request")
-	}
-
-	if requestID == requestID2 {
-		t.Errorf("expected different request IDs, got same: %s", requestID)
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("want 401, got %d", w.Code)
 	}
 }
 
-// TestPanicRecovery verifies that panics are caught and return 500
-func TestPanicRecovery(t *testing.T) {
-	log := logrus.New()
-	log.SetOutput(io.Discard)
+func TestIngestRoute_ValidAuth_ValidBody(t *testing.T) {
+	srv := newTestServer()
+	token := makeValidToken(t, testSecret)
 
-	srv := NewServer(nil, nil, nil, log)
+	req := httptest.NewRequest(http.MethodPost, "/v1/events", validEventsBody(t))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
 
-	// Add test endpoints
+	srv.ServeHTTP(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Errorf("want 202, got %d; body: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestIngestRoute_ValidAuth_InvalidBody(t *testing.T) {
+	srv := newTestServer()
+	token := makeValidToken(t, testSecret)
+
+	// Body is missing conference_id — should pass auth but fail validation.
+	badPayload := model.IngestPayload{
+		SessionID:    "sess-1",
+		ConnectionID: "conn-1",
+		Events:       []model.StatSnapshot{{TS: 1_000_000}},
+	}
+	b, _ := json.Marshal(badPayload)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/events", bytes.NewBuffer(b))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+
+	srv.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("want 400, got %d; body: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHealthRoute_NoAuth(t *testing.T) {
+	srv := newTestServer()
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	w := httptest.NewRecorder()
+
+	srv.ServeHTTP(w, req)
+
+	// Health endpoint is public — must not return 401.
+	// It may return 503 because DB/Redis are nil, but never 401.
+	if w.Code == http.StatusUnauthorized {
+		t.Errorf("health endpoint must not require auth, got 401")
+	}
+	if w.Code == http.StatusNotFound {
+		t.Errorf("health endpoint must be registered, got 404")
+	}
+}
+
+// --- Original middleware tests (updated for new NewServer signature) ---
+
+func TestRequestID_Present(t *testing.T) {
+	srv := newTestServer()
+
 	srv.router.Get("/test", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"message": "ok"})
 	})
 
-	srv.router.Get("/panic", func(w http.ResponseWriter, r *http.Request) {
-		panic("intentional panic for testing")
-	})
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
 
-	// First, make a normal request
-	req1 := httptest.NewRequest("GET", "/test", nil)
-	w1 := httptest.NewRecorder()
-	srv.ServeHTTP(w1, req1)
-
-	if w1.Code != http.StatusOK {
-		t.Errorf("expected normal request to return 200, got %d", w1.Code)
+	if w.Header().Get("X-Request-ID") == "" {
+		t.Error("expected X-Request-ID header to be present")
 	}
 
-	// Now make a request that will panic
-	req2 := httptest.NewRequest("GET", "/panic", nil)
+	req2 := httptest.NewRequest(http.MethodGet, "/test", nil)
 	w2 := httptest.NewRecorder()
 	srv.ServeHTTP(w2, req2)
 
-	if w2.Code != http.StatusInternalServerError {
-		t.Errorf("expected panic to return 500, got %d", w2.Code)
-	}
-
-	// Verify the process didn't crash and we can still serve requests
-	req3 := httptest.NewRequest("GET", "/test", nil)
-	w3 := httptest.NewRecorder()
-	srv.ServeHTTP(w3, req3)
-
-	if w3.Code != http.StatusOK {
-		t.Errorf("expected normal request after panic to return 200, got %d", w3.Code)
+	id1 := w.Header().Get("X-Request-ID")
+	id2 := w2.Header().Get("X-Request-ID")
+	if id1 == id2 {
+		t.Errorf("expected different request IDs, got same: %s", id1)
 	}
 }
 
-// TestLoggingMiddleware_IncludesRequestID verifies that logging includes request ID
+func TestPanicRecovery(t *testing.T) {
+	srv := newTestServer()
+
+	srv.router.Get("/ok", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	srv.router.Get("/panic", func(w http.ResponseWriter, r *http.Request) {
+		panic("intentional panic")
+	})
+
+	reqOK := httptest.NewRequest(http.MethodGet, "/ok", nil)
+	wOK := httptest.NewRecorder()
+	srv.ServeHTTP(wOK, reqOK)
+	if wOK.Code != http.StatusOK {
+		t.Errorf("want 200 for normal request, got %d", wOK.Code)
+	}
+
+	reqPanic := httptest.NewRequest(http.MethodGet, "/panic", nil)
+	wPanic := httptest.NewRecorder()
+	srv.ServeHTTP(wPanic, reqPanic)
+	if wPanic.Code != http.StatusInternalServerError {
+		t.Errorf("want 500 for panic, got %d", wPanic.Code)
+	}
+
+	// Server still functional after panic.
+	reqAfter := httptest.NewRequest(http.MethodGet, "/ok", nil)
+	wAfter := httptest.NewRecorder()
+	srv.ServeHTTP(wAfter, reqAfter)
+	if wAfter.Code != http.StatusOK {
+		t.Errorf("want 200 after panic recovery, got %d", wAfter.Code)
+	}
+}
+
 func TestLoggingMiddleware_IncludesRequestID(t *testing.T) {
 	log := logrus.New()
-
-	// Capture log output
-	logOutput := &strings.Builder{}
-	log.SetOutput(logOutput)
+	out := &strings.Builder{}
+	log.SetOutput(out)
 	log.SetFormatter(&logrus.JSONFormatter{})
 
-	srv := NewServer(nil, nil, nil, log)
-
+	srv := NewServer(nil, nil, nil, log, testSecret)
 	srv.router.Get("/test", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"message": "ok"})
 	})
 
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	w := httptest.NewRecorder()
-
 	srv.ServeHTTP(w, req)
 
-	// Check that the log contains the request ID and other fields
-	logStr := logOutput.String()
-	if !strings.Contains(logStr, "request_id") {
-		t.Errorf("expected log to contain request_id field")
-	}
-	if !strings.Contains(logStr, "method") {
-		t.Errorf("expected log to contain method field")
-	}
-	if !strings.Contains(logStr, "path") {
-		t.Errorf("expected log to contain path field")
-	}
-	if !strings.Contains(logStr, "status") {
-		t.Errorf("expected log to contain status field")
-	}
-	if !strings.Contains(logStr, "duration_ms") {
-		t.Errorf("expected log to contain duration_ms field")
+	logStr := out.String()
+	for _, field := range []string{"request_id", "method", "path", "status", "duration_ms"} {
+		if !strings.Contains(logStr, field) {
+			t.Errorf("expected log to contain %q field", field)
+		}
 	}
 }
 
-// TestHealthEndpoint_WhenCreated verifies the health endpoint is registered
 func TestHealthEndpoint_WhenCreated(t *testing.T) {
-	log := logrus.New()
-	log.SetOutput(io.Discard)
-
-	srv := NewServer(nil, nil, nil, log)
-
-	// Verify health endpoint exists (we can't easily call it without real DB/Redis,
-	// but we can verify the route was registered)
-	req := httptest.NewRequest("GET", "/health", nil)
+	srv := newTestServer()
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
-
 	srv.ServeHTTP(w, req)
 
-	// The endpoint will fail because we have nil db/redis, but that's expected
-	// We're just verifying the route is registered (status won't be 404)
 	if w.Code == http.StatusNotFound {
-		t.Errorf("expected health endpoint to be registered, got 404")
+		t.Error("expected health endpoint to be registered, got 404")
 	}
 }

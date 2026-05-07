@@ -12,7 +12,9 @@ import (
 	"github.com/RTCMon/rtcmon/internal/db"
 	"github.com/RTCMon/rtcmon/internal/logger"
 	"github.com/RTCMon/rtcmon/internal/migrate"
+	"github.com/RTCMon/rtcmon/internal/model"
 	"github.com/RTCMon/rtcmon/internal/ratelimit"
+	"github.com/RTCMon/rtcmon/internal/worker"
 	"github.com/RTCMon/rtcmon/services/ingest-api/server"
 )
 
@@ -61,6 +63,21 @@ func newServeCmd() *cobra.Command {
 				return fmt.Errorf("redis init: %w", err)
 			}
 			defer client.Close()
+
+			// Create and start worker pool (stub flush — BE-011 replaces this)
+			wp := worker.New(
+				worker.Config{
+					WorkerCount:     cfg.Worker.Count,
+					BatchSize:       cfg.Worker.BatchSize,
+					FlushIntervalMs: cfg.Worker.FlushIntervalMs,
+					ChannelCap:      cfg.Worker.ChannelCap,
+				},
+				func(ctx context.Context, batch []model.IngestPayload) {
+					log.WithField("batch_size", len(batch)).Debug("worker: flush (stub)")
+				},
+				log,
+			)
+			defer wp.Shutdown()
 
 			// Create and start HTTP server
 			rl := ratelimit.New(client, ratelimit.Config{

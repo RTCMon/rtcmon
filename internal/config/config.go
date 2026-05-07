@@ -66,6 +66,9 @@ func Load() (*Config, error) {
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 
+	// Explicitly bind env var to ensure it's read
+	v.BindEnv("auth.jwt_secret", "AUTH_JWT_SECRET")
+
 	if err := v.ReadInConfig(); err != nil {
 		// Missing config file is not an error; all values can come from env.
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
@@ -79,6 +82,10 @@ func Load() (*Config, error) {
 	}
 
 	applyComputedDefaults(cfg)
+
+	if err := validate(cfg); err != nil {
+		return nil, err
+	}
 
 	return cfg, nil
 }
@@ -110,4 +117,12 @@ func applyComputedDefaults(cfg *Config) {
 	if cfg.Worker.ChannelCap == 0 {
 		cfg.Worker.ChannelCap = cfg.Worker.Count * cfg.Worker.BatchSize * 4
 	}
+}
+
+// validate checks that required configuration values are set.
+func validate(cfg *Config) error {
+	if cfg.Auth.JWTSecret == "" {
+		return fmt.Errorf("auth.jwt_secret is required: set AUTH_JWT_SECRET environment variable")
+	}
+	return nil
 }

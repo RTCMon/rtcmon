@@ -45,10 +45,11 @@ type RateLimitConfig struct {
 }
 
 type WorkerConfig struct {
-	Count           int `mapstructure:"count"`
-	BatchSize       int `mapstructure:"batch_size"`
-	FlushIntervalMs int `mapstructure:"flush_interval_ms"`
-	ChannelCap      int `mapstructure:"channel_cap"`
+	Count           int    `mapstructure:"count"`
+	BatchSize       int    `mapstructure:"batch_size"`
+	FlushIntervalMs int    `mapstructure:"flush_interval_ms"`
+	ChannelCap      int    `mapstructure:"channel_cap"`
+	DeadLetterDir   string `mapstructure:"dead_letter_dir"`
 }
 
 type LogConfig struct {
@@ -111,6 +112,7 @@ func setDefaults(v *viper.Viper) {
 
 	v.SetDefault("worker.batch_size", 500)
 	v.SetDefault("worker.flush_interval_ms", 100)
+	v.SetDefault("worker.dead_letter_dir", "./dead_letter/")
 
 	v.SetDefault("log.level", "info")
 }

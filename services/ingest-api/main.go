@@ -10,9 +10,9 @@ import (
 	"github.com/RTCMon/rtcmon/internal/cache"
 	"github.com/RTCMon/rtcmon/internal/config"
 	"github.com/RTCMon/rtcmon/internal/db"
+	"github.com/RTCMon/rtcmon/internal/ingest"
 	"github.com/RTCMon/rtcmon/internal/logger"
 	"github.com/RTCMon/rtcmon/internal/migrate"
-	"github.com/RTCMon/rtcmon/internal/model"
 	"github.com/RTCMon/rtcmon/internal/ratelimit"
 	"github.com/RTCMon/rtcmon/internal/worker"
 	"github.com/RTCMon/rtcmon/services/ingest-api/server"
@@ -64,7 +64,8 @@ func newServeCmd() *cobra.Command {
 			}
 			defer client.Close()
 
-			// Create and start worker pool (stub flush — BE-011 replaces this)
+			// Create flusher and worker pool.
+			flusher := ingest.New(pool, log, cfg.Worker.DeadLetterDir)
 			wp := worker.New(
 				worker.Config{
 					WorkerCount:     cfg.Worker.Count,
@@ -72,9 +73,7 @@ func newServeCmd() *cobra.Command {
 					FlushIntervalMs: cfg.Worker.FlushIntervalMs,
 					ChannelCap:      cfg.Worker.ChannelCap,
 				},
-				func(ctx context.Context, batch []model.IngestPayload) {
-					log.WithField("batch_size", len(batch)).Debug("worker: flush (stub)")
-				},
+				flusher.Flush,
 				log,
 			)
 			defer wp.Shutdown()

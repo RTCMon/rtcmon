@@ -197,6 +197,24 @@ func TestHMACMiddleware_StaleTimestamp_Future(t *testing.T) {
 	}
 }
 
+func TestHMACMiddleware_InvalidTimestampFormat(t *testing.T) {
+	m, _ := newStubMiddleware(t, false, nil)
+	handler := m.handler()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+
+	w := doRequest(t, handler, "POST", "/v1/server/events", map[string]string{
+		"X-API-Key":   "somekey",
+		"X-Timestamp": "not-a-number",
+		"X-Signature": "abc",
+	}, nil)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("want 401, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "invalid timestamp") {
+		t.Errorf("unexpected body: %s", w.Body.String())
+	}
+}
+
 // ----- Step 3: Unknown key ---------------------------------------------------
 
 func TestHMACMiddleware_UnknownKey(t *testing.T) {

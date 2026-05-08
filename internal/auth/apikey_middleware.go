@@ -105,7 +105,7 @@ func (m *apiKeyMiddleware) handler() func(http.Handler) http.Handler {
 			// Step 2: Timestamp window check — fail fast before any DB I/O.
 			ts, err := strconv.ParseInt(tsStr, 10, 64)
 			if err != nil {
-				writeAPIKeyError(w, http.StatusUnauthorized, "timestamp out of window")
+				writeAPIKeyError(w, http.StatusUnauthorized, "invalid timestamp")
 				return
 			}
 			diff := m.nowFn().Unix() - ts

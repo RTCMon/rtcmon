@@ -95,19 +95,40 @@ func (rl *RateLimiter) Allow(ctx context.Context, appID string) (bool, error) {
 }
 
 // Middleware returns a chi-compatible HTTP middleware that enforces the rate
-// limit. It reads AppID from the JWT claims already placed in context by
-// auth.Authenticate. Requests over the limit receive a 429 with
-// Retry-After: 1.
+// limit keyed by AppID from JWT claims. Requests over the limit receive 429
+// with Retry-After: 1.
 func (rl *RateLimiter) Middleware() func(http.Handler) http.Handler {
+	return rl.MiddlewareWithKeyFn(func(r *http.Request) string {
+		return auth.ClaimsFromContext(r.Context()).AppID
+	})
+}
+
+// ServerMiddleware returns a middleware that enforces the rate limit keyed by
+// the server API key from HMAC auth claims (ServerClaims.APIKey). It is
+// independent of the JWT rate limit — exhausting one does not affect the other.
+func (rl *RateLimiter) ServerMiddleware() func(http.Handler) http.Handler {
+	return rl.MiddlewareWithKeyFn(func(r *http.Request) string {
+		claims := auth.ServerClaimsFromContext(r.Context())
+		if claims == nil {
+			return ""
+		}
+		return claims.APIKey
+	})
+}
+
+// MiddlewareWithKeyFn returns a chi-compatible HTTP middleware that enforces the
+// rate limit using a caller-supplied key extractor. An empty key skips the
+// check and calls next directly.
+func (rl *RateLimiter) MiddlewareWithKeyFn(keyFn func(*http.Request) string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			claims := auth.ClaimsFromContext(r.Context())
-			if claims.AppID == "" {
+			key := keyFn(r)
+			if key == "" {
 				next.ServeHTTP(w, r)
 				return
 			}
 
-			allowed, _ := rl.Allow(r.Context(), claims.AppID)
+			allowed, _ := rl.Allow(r.Context(), key)
 			if !allowed {
 				w.Header().Set("Content-Type", "application/json")
 				w.Header().Set("Retry-After", "1")

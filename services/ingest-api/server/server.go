@@ -18,28 +18,43 @@ import (
 )
 
 type Server struct {
-	router      *chi.Mux
-	db          *pgxpool.Pool
-	redis       *redis.Client
-	log         *logrus.Logger
-	jwtSecret   string
-	rateLimiter *ratelimit.RateLimiter
-	enqueue     handler.EnqueueFn
-	emosTrigger handler.EMOSTriggerFn
+	router           *chi.Mux
+	db               *pgxpool.Pool
+	redis            *redis.Client
+	log              *logrus.Logger
+	jwtSecret        string
+	rateLimiter      *ratelimit.RateLimiter
+	serverMasterKey  []byte
+	serverRateLimiter *ratelimit.RateLimiter
+	enqueue          handler.EnqueueFn
+	emosTrigger      handler.EMOSTriggerFn
 }
 
-func NewServer(ctx context.Context, db *pgxpool.Pool, redis *redis.Client, log *logrus.Logger, jwtSecret string, rl *ratelimit.RateLimiter, enqueue handler.EnqueueFn, emosTrigger handler.EMOSTriggerFn) *Server {
+func NewServer(
+	ctx context.Context,
+	db *pgxpool.Pool,
+	rdb *redis.Client,
+	log *logrus.Logger,
+	jwtSecret string,
+	rl *ratelimit.RateLimiter,
+	serverMasterKey []byte,
+	serverRL *ratelimit.RateLimiter,
+	enqueue handler.EnqueueFn,
+	emosTrigger handler.EMOSTriggerFn,
+) *Server {
 	r := chi.NewRouter()
 
 	s := &Server{
-		router:      r,
-		db:          db,
-		redis:       redis,
-		log:         log,
-		jwtSecret:   jwtSecret,
-		rateLimiter: rl,
-		enqueue:     enqueue,
-		emosTrigger: emosTrigger,
+		router:            r,
+		db:                db,
+		redis:             rdb,
+		log:               log,
+		jwtSecret:         jwtSecret,
+		rateLimiter:       rl,
+		serverMasterKey:   serverMasterKey,
+		serverRateLimiter: serverRL,
+		enqueue:           enqueue,
+		emosTrigger:       emosTrigger,
 	}
 
 	s.setupMiddleware()
@@ -58,7 +73,7 @@ func (s *Server) setupRoutes() {
 	// Public routes — no auth required.
 	s.router.Get("/health", handler.HandleHealth(s.db, s.redis, s.log))
 
-	// Protected routes — JWT required. Auth fires before the handler.
+	// JWT-authenticated routes.
 	s.router.Group(func(r chi.Router) {
 		r.Use(auth.Authenticate(s.jwtSecret))
 		if s.rateLimiter != nil {
@@ -68,6 +83,21 @@ func (s *Server) setupRoutes() {
 		r.Post("/v1/conferences/{conferenceID}/end",
 			handler.HandleEndConference(s.db, s.log, s.emosTrigger))
 	})
+
+	// HMAC-authenticated server SDK routes.
+	// Only registered when SERVER_MASTER_KEY is configured; a missing key would
+	// make decryption impossible and silently accept invalid requests.
+	if len(s.serverMasterKey) == 32 {
+		s.router.Group(func(r chi.Router) {
+			r.Use(auth.AuthenticateAPIKey(s.db, s.redis, s.serverMasterKey))
+			if s.serverRateLimiter != nil {
+				r.Use(s.serverRateLimiter.ServerMiddleware())
+			}
+			r.Post("/v1/server/events", handler.HandleServerEvents(s.log, s.enqueue))
+		})
+	} else {
+		s.log.Warn("SERVER_MASTER_KEY not configured — /v1/server/events endpoint disabled")
+	}
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {

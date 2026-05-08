@@ -10,13 +10,14 @@ import (
 )
 
 type Config struct {
-	Server ServerConfig
-	DB     DBConfig
-	Redis  RedisConfig
-	Auth      AuthConfig
-	RateLimit RateLimitConfig
-	Worker    WorkerConfig
-	Log    LogConfig
+	Server          ServerConfig
+	DB              DBConfig
+	Redis           RedisConfig
+	Auth            AuthConfig
+	RateLimit       RateLimitConfig
+	ServerRateLimit RateLimitConfig `mapstructure:"server_rate_limit"`
+	Worker          WorkerConfig
+	Log             LogConfig
 }
 
 type ServerConfig struct {
@@ -112,6 +113,9 @@ func setDefaults(v *viper.Viper) {
 
 	v.SetDefault("rate_limit.max", 100)
 	v.SetDefault("rate_limit.window_secs", 60)
+
+	v.SetDefault("server_rate_limit.max", 1000)
+	v.SetDefault("server_rate_limit.window_secs", 60)
 
 	v.SetDefault("worker.batch_size", 500)
 	v.SetDefault("worker.flush_interval_ms", 100)

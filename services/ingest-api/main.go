@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"os"
@@ -103,7 +104,19 @@ func newServeCmd() *cobra.Command {
 				Max:        cfg.RateLimit.Max,
 				WindowSecs: cfg.RateLimit.WindowSecs,
 			}, log)
-			srv := server.NewServer(ctx, pool, client, log, cfg.Auth.JWTSecret, rl, wp.Enqueue, emosTrigger)
+
+			// Decode SERVER_MASTER_KEY (already validated by config.Load).
+			var serverMasterKey []byte
+			if cfg.Auth.ServerMasterKey != "" {
+				serverMasterKey, _ = base64.StdEncoding.DecodeString(cfg.Auth.ServerMasterKey)
+			}
+
+			serverRL := ratelimit.New(client, ratelimit.Config{
+				Max:        cfg.ServerRateLimit.Max,
+				WindowSecs: cfg.ServerRateLimit.WindowSecs,
+			}, log)
+
+			srv := server.NewServer(ctx, pool, client, log, cfg.Auth.JWTSecret, rl, serverMasterKey, serverRL, wp.Enqueue, emosTrigger)
 
 			sigCh := make(chan os.Signal, 1)
 			signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)

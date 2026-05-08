@@ -100,7 +100,7 @@ func newE2EServer(t *testing.T) *httptest.Server {
 	t.Cleanup(wp.Shutdown)
 
 	rl := ratelimit.New(rdb, ratelimit.Config{Max: 10000, WindowSecs: 60}, log)
-	srv := server.NewServer(context.Background(), pool, rdb, log, e2eSecret, rl, wp.Enqueue, nil)
+	srv := server.NewServer(context.Background(), pool, rdb, log, e2eSecret, rl, nil, nil, wp.Enqueue, nil)
 	ts := httptest.NewServer(srv)
 	t.Cleanup(ts.Close)
 	return ts
@@ -233,7 +233,7 @@ func TestIngest_E2E_ChannelFull(t *testing.T) {
 
 	alwaysFull := func(model.IngestPayload) error { return worker.ErrChannelFull }
 	rl := ratelimit.New(rdb, ratelimit.Config{Max: 10000, WindowSecs: 60}, log)
-	srv := server.NewServer(context.Background(), pool, rdb, log, e2eSecret, rl, alwaysFull, nil)
+	srv := server.NewServer(context.Background(), pool, rdb, log, e2eSecret, rl, nil, nil, alwaysFull, nil)
 	ts := httptest.NewServer(srv)
 	t.Cleanup(ts.Close)
 
@@ -264,7 +264,7 @@ func TestIngest_E2E_UnauthorizedSkipsChannel(t *testing.T) {
 		return nil
 	}
 	rl := ratelimit.New(rdb, ratelimit.Config{Max: 10000, WindowSecs: 60}, log)
-	srv := server.NewServer(context.Background(), pool, rdb, log, e2eSecret, rl, countingEnqueue, nil)
+	srv := server.NewServer(context.Background(), pool, rdb, log, e2eSecret, rl, nil, nil, countingEnqueue, nil)
 	ts := httptest.NewServer(srv)
 	t.Cleanup(ts.Close)
 

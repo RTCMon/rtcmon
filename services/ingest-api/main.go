@@ -65,7 +65,7 @@ func newServeCmd() *cobra.Command {
 			defer client.Close()
 
 			// Create flusher and worker pool.
-			flusher := ingest.New(pool, log, cfg.Worker.DeadLetterDir)
+			flusher := ingest.New(pool, client, log, cfg.Worker.DeadLetterDir)
 			wp := worker.New(
 				worker.Config{
 					WorkerCount:     cfg.Worker.Count,

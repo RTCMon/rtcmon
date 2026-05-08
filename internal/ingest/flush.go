@@ -20,6 +20,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
 
 	"github.com/RTCMon/rtcmon/internal/model"
@@ -54,10 +55,11 @@ func newEWMA(raw model.StatSnapshot) *ewmaState {
 	}
 }
 
-// Flusher persists batches of IngestPayload to Postgres. Create with New.
-// Safe for concurrent use by multiple worker goroutines.
+// Flusher persists batches of IngestPayload to Postgres and updates the Redis
+// active-conference cache. Create with New. Safe for concurrent use.
 type Flusher struct {
 	pool          *pgxpool.Pool
+	rdb           redisClient
 	log           *logrus.Logger
 	deadLetterDir string
 
@@ -66,9 +68,10 @@ type Flusher struct {
 }
 
 // New creates a Flusher. deadLetterDir is created on first use if absent.
-func New(pool *pgxpool.Pool, log *logrus.Logger, deadLetterDir string) *Flusher {
+func New(pool *pgxpool.Pool, rdb *redis.Client, log *logrus.Logger, deadLetterDir string) *Flusher {
 	return &Flusher{
 		pool:          pool,
+		rdb:           rdb,
 		log:           log,
 		deadLetterDir: deadLetterDir,
 		ewmaState:     make(map[string]*ewmaState),
@@ -76,8 +79,9 @@ func New(pool *pgxpool.Pool, log *logrus.Logger, deadLetterDir string) *Flusher 
 }
 
 // Flush implements worker.FlushFn. It upserts the entity hierarchy, computes
-// EWMA values, and bulk-inserts connection_stats rows. On CopyFrom failure it
-// writes a dead-letter file and logs the error.
+// EWMA values, and bulk-inserts connection_stats rows. On success it updates
+// the Redis active-conference cache. On CopyFrom failure it writes a
+// dead-letter file and skips the cache update.
 func (f *Flusher) Flush(ctx context.Context, batch []model.IngestPayload) {
 	if len(batch) == 0 {
 		return
@@ -86,7 +90,10 @@ func (f *Flusher) Flush(ctx context.Context, batch []model.IngestPayload) {
 	if err := f.flush(ctx, batch); err != nil {
 		f.log.WithError(err).Error("ingest: flush failed, writing dead-letter")
 		f.writeDeadLetter(batch)
+		return
 	}
+
+	f.updateCache(ctx, batch)
 }
 
 func (f *Flusher) flush(ctx context.Context, batch []model.IngestPayload) error {

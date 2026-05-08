@@ -10,7 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
 
 	"github.com/RTCMon/rtcmon/internal/ingest"
@@ -95,6 +97,17 @@ func discardLogger() *logrus.Logger {
 	return log
 }
 
+// testRedis starts a miniredis server and returns a connected client.
+// Cache writes in integration tests are fire-and-forget; miniredis just
+// absorbs them so the flush path is exercised end-to-end.
+func testRedis(t *testing.T) *redis.Client {
+	t.Helper()
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+	return rdb
+}
+
 // makePayload builds a minimal IngestPayload.
 func makePayload(appID, confID, sessID, connID, userID string, ts int64, rtt float64) model.IngestPayload {
 	return model.IngestPayload{
@@ -118,7 +131,7 @@ func TestFlush_SingleRow(t *testing.T) {
 	appID := seedApp(t, pool)
 	appIDStr := itoa(appID)
 
-	f := ingest.New(pool, discardLogger(), t.TempDir())
+	f := ingest.New(pool, testRedis(t), discardLogger(), t.TempDir())
 	p := makePayload(appIDStr, "conf-1", "sess-1", "conn-1", "user-1", nowMs(), 50)
 	f.Flush(ctx, []model.IngestPayload{p})
 
@@ -153,7 +166,7 @@ func TestFlush_BatchOf500(t *testing.T) {
 		)
 	}
 
-	f := ingest.New(pool, discardLogger(), t.TempDir())
+	f := ingest.New(pool, testRedis(t), discardLogger(), t.TempDir())
 
 	start := time.Now()
 	f.Flush(ctx, batch)
@@ -179,7 +192,7 @@ func TestFlush_DuplicateConference(t *testing.T) {
 	appIDStr := itoa(appID)
 	ts := nowMs()
 
-	f := ingest.New(pool, discardLogger(), t.TempDir())
+	f := ingest.New(pool, testRedis(t), discardLogger(), t.TempDir())
 	p1 := makePayload(appIDStr, "conf-dup", "sess-1", "conn-1", "user-1", ts, 10)
 	p2 := makePayload(appIDStr, "conf-dup", "sess-2", "conn-2", "user-1", ts+1, 20)
 	f.Flush(ctx, []model.IngestPayload{p1})
@@ -202,7 +215,7 @@ func TestFlush_DuplicateSession(t *testing.T) {
 	appIDStr := itoa(appID)
 	ts := nowMs()
 
-	f := ingest.New(pool, discardLogger(), t.TempDir())
+	f := ingest.New(pool, testRedis(t), discardLogger(), t.TempDir())
 	p1 := makePayload(appIDStr, "conf-1", "sess-dup", "conn-1", "user-1", ts, 10)
 	p2 := makePayload(appIDStr, "conf-1", "sess-dup", "conn-2", "user-1", ts+1, 20)
 	f.Flush(ctx, []model.IngestPayload{p1})
@@ -229,7 +242,7 @@ func TestFlush_PartitionRouting(t *testing.T) {
 	nextMonth := time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, time.UTC)
 	tsMs := nextMonth.UnixMilli()
 
-	f := ingest.New(pool, discardLogger(), t.TempDir())
+	f := ingest.New(pool, testRedis(t), discardLogger(), t.TempDir())
 	p := makePayload(appIDStr, "conf-part", "sess-part", "conn-part", "user-1", tsMs, 10)
 	f.Flush(ctx, []model.IngestPayload{p})
 
@@ -251,7 +264,7 @@ func TestFlush_EWMA_FirstSample(t *testing.T) {
 	appIDStr := itoa(appID)
 	const rawRTT = 42.0
 
-	f := ingest.New(pool, discardLogger(), t.TempDir())
+	f := ingest.New(pool, testRedis(t), discardLogger(), t.TempDir())
 	p := makePayload(appIDStr, "conf-ewma1", "sess-ewma1", "conn-ewma1", "user-1", nowMs(), rawRTT)
 	f.Flush(ctx, []model.IngestPayload{p})
 
@@ -278,7 +291,7 @@ func TestFlush_EWMA_SecondSample(t *testing.T) {
 	)
 	expectedEWMA2 := 0.2*raw2 + 0.8*raw1 // prev EWMA after first sample == raw1
 
-	f := ingest.New(pool, discardLogger(), t.TempDir())
+	f := ingest.New(pool, testRedis(t), discardLogger(), t.TempDir())
 
 	p1 := makePayload(appIDStr, "conf-ewma2", "sess-ewma2", "conn-ewma2", "user-1", ts, raw1)
 	f.Flush(ctx, []model.IngestPayload{p1})
@@ -314,7 +327,7 @@ func TestFlush_EWMA_StateIsolated(t *testing.T) {
 		rawB2 = 200.0
 	)
 
-	f := ingest.New(pool, discardLogger(), t.TempDir())
+	f := ingest.New(pool, testRedis(t), discardLogger(), t.TempDir())
 
 	// First batch: one event each for conn-A and conn-B.
 	batch1 := []model.IngestPayload{
@@ -370,7 +383,7 @@ func TestFlush_DeadLetter_OnError(t *testing.T) {
 	ctx := context.Background()
 
 	dir := t.TempDir()
-	f := ingest.New(pool, discardLogger(), dir)
+	f := ingest.New(pool, testRedis(t), discardLogger(), dir)
 
 	// app_id "not-a-number" will fail strconv.ParseInt → flush error.
 	p := makePayload("not-a-number", "conf-1", "sess-1", "conn-1", "user-1", nowMs(), 10)
@@ -392,7 +405,7 @@ func TestFlush_DeadLetterFile_IsValidJSON(t *testing.T) {
 	ctx := context.Background()
 
 	dir := t.TempDir()
-	f := ingest.New(pool, discardLogger(), dir)
+	f := ingest.New(pool, testRedis(t), discardLogger(), dir)
 
 	p := makePayload("not-a-number", "conf-1", "sess-1", "conn-1", "user-1", nowMs(), 10)
 	f.Flush(ctx, []model.IngestPayload{p})

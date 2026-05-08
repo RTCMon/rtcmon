@@ -51,6 +51,8 @@ func runMigrations(t *testing.T, pool *pgxpool.Pool) {
 	files := []string{
 		"../../migrations/000001_initial_schema.up.sql",
 		"../../migrations/000002_add_external_id.up.sql",
+		"../../migrations/000003_server_api_key.up.sql",
+		"../../migrations/000004_connection_stats_source.up.sql",
 	}
 	for _, f := range files {
 		data, err := os.ReadFile(filepath.Clean(f))
@@ -435,4 +437,166 @@ func nowMs() int64 {
 
 func itoa(n int64) string {
 	return fmt.Sprintf("%d", n)
+}
+
+// ── BE-020: source field tests ────────────────────────────────────────────────
+
+// TestFlush_SourceStored_Browser verifies that a payload with Source=""
+// (JS SDK / JWT path) is stored with source='browser' in connection_stats.
+func TestFlush_SourceStored_Browser(t *testing.T) {
+	pool := testDB(t)
+	ctx := context.Background()
+	appID := seedApp(t, pool)
+
+	f := ingest.New(pool, testRedis(t), discardLogger(), t.TempDir())
+
+	p := makePayload(itoa(appID), "conf-src-browser", "sess-src-b", "conn-src-b", "user-1", nowMs(), 1)
+	p.Source = "" // JS SDK omits source
+	f.Flush(ctx, []model.IngestPayload{p})
+
+	var src string
+	err := pool.QueryRow(ctx,
+		`SELECT source FROM connection_stats cs
+		 JOIN connections c ON c.id = cs.connection_id
+		 WHERE c.external_id = $1 LIMIT 1`,
+		"conn-src-b",
+	).Scan(&src)
+	if err != nil {
+		t.Fatalf("query source: %v", err)
+	}
+	if src != "browser" {
+		t.Errorf("source = %q, want %q", src, "browser")
+	}
+}
+
+// TestFlush_SourceStored_Server verifies that a payload with Source="server"
+// (Go SDK / HMAC path) is stored with source='server' in connection_stats.
+func TestFlush_SourceStored_Server(t *testing.T) {
+	pool := testDB(t)
+	ctx := context.Background()
+	appID := seedApp(t, pool)
+
+	f := ingest.New(pool, testRedis(t), discardLogger(), t.TempDir())
+
+	p := makePayload(itoa(appID), "conf-src-server", "sess-src-s", "conn-src-s", "user-1", nowMs(), 1)
+	p.Source = "server"
+	f.Flush(ctx, []model.IngestPayload{p})
+
+	var src string
+	err := pool.QueryRow(ctx,
+		`SELECT source FROM connection_stats cs
+		 JOIN connections c ON c.id = cs.connection_id
+		 WHERE c.external_id = $1 LIMIT 1`,
+		"conn-src-s",
+	).Scan(&src)
+	if err != nil {
+		t.Fatalf("query source: %v", err)
+	}
+	if src != "server" {
+		t.Errorf("source = %q, want %q", src, "server")
+	}
+}
+
+// TestFlush_EWMA_SourceIsolated verifies that browser and server stats for the
+// same connection_id maintain independent EWMA histories. It does this by:
+//  1. Flushing a first batch for both browser and server (different RTT values).
+//  2. Flushing a second batch for both.
+//  3. Checking that the second-batch EWMA for browser is computed from browser's
+//     first-batch RTT, not contaminated by server's first-batch RTT.
+func TestFlush_EWMA_SourceIsolated(t *testing.T) {
+	pool := testDB(t)
+	ctx := context.Background()
+	appID := seedApp(t, pool)
+
+	f := ingest.New(pool, testRedis(t), discardLogger(), t.TempDir())
+
+	const (
+		connID        = "conn-ewma-iso"
+		browserRTT1   = 100.0
+		serverRTT1    = 500.0 // very different — would contaminate browser EWMA if not isolated
+		browserRTT2   = 110.0
+	)
+
+	baseTS := nowMs()
+
+	// Batch 1: browser + server, same connection_id, different RTT.
+	browserP1 := makePayload(itoa(appID), "conf-ewma-iso", "sess-ewma-b", connID, "user-1", baseTS, 1)
+	browserP1.Source = "browser"
+	browserP1.Events[0].RTTMs = browserRTT1
+
+	serverP1 := makePayload(itoa(appID), "conf-ewma-iso", "sess-ewma-s", connID, "user-1", baseTS+1, 1)
+	serverP1.Source = "server"
+	serverP1.Events[0].RTTMs = serverRTT1
+
+	f.Flush(ctx, []model.IngestPayload{browserP1, serverP1})
+
+	// Batch 2: only browser, same connection_id.
+	browserP2 := makePayload(itoa(appID), "conf-ewma-iso", "sess-ewma-b", connID, "user-1", baseTS+2, 1)
+	browserP2.Source = "browser"
+	browserP2.Events[0].RTTMs = browserRTT2
+
+	f.Flush(ctx, []model.IngestPayload{browserP2})
+
+	// Expected EWMA for second browser row: 0.2*110 + 0.8*100 = 102.0
+	// If EWMA were contaminated by server's RTT=500: result would be very different.
+	expectedEWMA := 0.2*browserRTT2 + 0.8*browserRTT1
+
+	var gotEWMA float64
+	err := pool.QueryRow(ctx, `
+		SELECT ewma_rtt_ms
+		FROM connection_stats cs
+		JOIN connections c ON c.id = cs.connection_id
+		WHERE c.external_id = $1 AND source = 'browser'
+		ORDER BY ts DESC
+		LIMIT 1
+	`, connID).Scan(&gotEWMA)
+	if err != nil {
+		t.Fatalf("query ewma: %v", err)
+	}
+
+	const tolerance = 0.01
+	if math.Abs(gotEWMA-expectedEWMA) > tolerance {
+		t.Errorf("ewma_rtt_ms = %.4f, want %.4f (±%.4f); EWMA may be contaminated by server source",
+			gotEWMA, expectedEWMA, tolerance)
+	}
+}
+
+// TestMigration_SourceColumn verifies that migration 000004 adds the source
+// column with the correct default, and that the down migration removes it.
+func TestMigration_SourceColumn(t *testing.T) {
+	pool := testDB(t)
+	ctx := context.Background()
+
+	// Migration was already applied by runMigrations in testDB. Verify the column
+	// exists with its default value.
+	var colDefault string
+	err := pool.QueryRow(ctx, `
+		SELECT column_default
+		FROM information_schema.columns
+		WHERE table_name = 'connection_stats' AND column_name = 'source'
+	`).Scan(&colDefault)
+	if err != nil {
+		t.Fatalf("query column_default: %v (column may be absent)", err)
+	}
+	if colDefault != "'browser'::text" {
+		t.Errorf("column default = %q, want %q", colDefault, "'browser'::text")
+	}
+
+	// Apply the down migration and verify the column is gone.
+	downSQL, err := os.ReadFile("../../migrations/000004_connection_stats_source.down.sql")
+	if err != nil {
+		t.Fatalf("read down migration: %v", err)
+	}
+	if _, err := pool.Exec(ctx, string(downSQL)); err != nil {
+		t.Fatalf("apply down migration: %v", err)
+	}
+
+	var count int
+	pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM information_schema.columns
+		WHERE table_name = 'connection_stats' AND column_name = 'source'
+	`).Scan(&count)
+	if count != 0 {
+		t.Error("source column still present after down migration")
+	}
 }

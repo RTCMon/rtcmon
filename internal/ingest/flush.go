@@ -136,6 +136,7 @@ func (f *Flusher) flush(ctx context.Context, batch []model.IngestPayload) error 
 		pgx.Identifier{"connection_stats"},
 		[]string{
 			"connection_id", "ts",
+			"source",
 			"packets_lost_rate", "jitter_ms", "rtt_ms",
 			"bitrate_in_kbps", "bitrate_out_kbps",
 			"ewma_packets_lost_rate", "ewma_jitter_ms", "ewma_rtt_ms",
@@ -324,6 +325,12 @@ func (f *Flusher) upsertConnections(
 
 // buildStatRows computes EWMA values for each stat snapshot and returns the
 // rows for pgx.CopyFromRows. The EWMA state map is updated under a mutex.
+//
+// Source normalisation: an empty Source is treated as "browser" so that
+// payloads from the JWT path (JS SDK) are correctly labelled.
+//
+// EWMA isolation: the state key includes the source so that browser and server
+// stats for the same connection_id accumulate independent EWMA histories.
 func (f *Flusher) buildStatRows(
 	batch []model.IngestPayload,
 	connIDs map[string]int64,
@@ -333,12 +340,19 @@ func (f *Flusher) buildStatRows(
 
 	var rows [][]any
 	for _, p := range batch {
+		source := p.Source
+		if source == "" {
+			source = "browser"
+		}
+
 		connDBID := connIDs[p.ConnectionID]
+		ewmaKey := p.ConnectionID + "|" + source
+
 		for _, ev := range p.Events {
-			state, exists := f.ewmaState[p.ConnectionID]
+			state, exists := f.ewmaState[ewmaKey]
 			if !exists {
 				state = newEWMA(ev)
-				f.ewmaState[p.ConnectionID] = state
+				f.ewmaState[ewmaKey] = state
 			} else {
 				state.update(ev)
 			}
@@ -347,6 +361,7 @@ func (f *Flusher) buildStatRows(
 
 			rows = append(rows, []any{
 				connDBID, ts,
+				source,
 				float32(ev.PacketLossRate), float32(ev.JitterMs), float32(ev.RTTMs),
 				int32(ev.BitrateInKbps), int32(ev.BitrateOutKbps), //nolint:gosec
 				float32(state.PacketLossRate), float32(state.JitterMs), float32(state.RTTMs),

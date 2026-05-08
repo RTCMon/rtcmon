@@ -49,6 +49,9 @@ func (f *Flusher) updateCache(ctx context.Context, batch []model.IngestPayload) 
 		}
 	}
 
+	if f.rdb == nil {
+		return
+	}
 	pipe := f.rdb.Pipeline()
 	for key, s := range stats {
 		redisKey := "active_conf:" + key

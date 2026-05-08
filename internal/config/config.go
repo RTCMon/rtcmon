@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"fmt"
 	"runtime"
 	"strings"
@@ -36,7 +37,8 @@ type RedisConfig struct {
 }
 
 type AuthConfig struct {
-	JWTSecret string `mapstructure:"jwt_secret"`
+	JWTSecret       string `mapstructure:"jwt_secret"`
+	ServerMasterKey string `mapstructure:"server_master_key"`
 }
 
 type RateLimitConfig struct {
@@ -73,8 +75,9 @@ func Load() (*Config, error) {
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
 
-	// Explicitly bind env var to ensure it's read
+	// Explicitly bind env vars to ensure they're read.
 	v.BindEnv("auth.jwt_secret", "AUTH_JWT_SECRET")
+	v.BindEnv("auth.server_master_key", "SERVER_MASTER_KEY")
 
 	if err := v.ReadInConfig(); err != nil {
 		// Missing config file is not an error; all values can come from env.
@@ -135,5 +138,16 @@ func validate(cfg *Config) error {
 	if cfg.Auth.JWTSecret == "" {
 		return fmt.Errorf("auth.jwt_secret is required: set AUTH_JWT_SECRET environment variable")
 	}
+
+	if cfg.Auth.ServerMasterKey != "" {
+		decoded, err := base64.StdEncoding.DecodeString(cfg.Auth.ServerMasterKey)
+		if err != nil {
+			return fmt.Errorf("auth.server_master_key: invalid base64: %w", err)
+		}
+		if len(decoded) != 32 {
+			return fmt.Errorf("auth.server_master_key: must decode to exactly 32 bytes, got %d", len(decoded))
+		}
+	}
+
 	return nil
 }

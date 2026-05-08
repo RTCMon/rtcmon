@@ -94,9 +94,11 @@ func (s *Server) setupRoutes() {
 				r.Use(s.serverRateLimiter.ServerMiddleware())
 			}
 			r.Post("/v1/server/events", handler.HandleServerEvents(s.log, s.enqueue))
+			r.Post("/v1/server/conferences/{conferenceID}/end",
+				handler.HandleEndConference(s.db, s.log, s.emosTrigger))
 		})
 	} else {
-		s.log.Warn("SERVER_MASTER_KEY not configured — /v1/server/events endpoint disabled")
+		s.log.Warn("SERVER_MASTER_KEY not configured — /v1/server/* endpoints disabled")
 	}
 }
 

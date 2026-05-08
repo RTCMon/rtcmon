@@ -18,20 +18,35 @@ import (
 // Implementations must be non-blocking; the handler does not wait on them.
 type EMOSTriggerFn func(conferenceID int64)
 
-// HandleEndConference implements POST /v1/conferences/{conferenceID}/end.
-// The URL parameter {conferenceID} is the conference external_id (SDK-facing
-// string identifier). The handler:
-//  1. Looks up the conference by external_id (→ 404 if absent)
-//  2. Verifies app ownership via JWT AppID (→ 403 on mismatch)
-//  3. Sets ended_at = now() idempotently (no-op if already ended)
-//  4. Fires the eMOS trigger asynchronously (non-blocking)
-//  5. Returns 202
+// resolveAppID returns the numeric app ID from whichever auth context is
+// present in the request. JWT Claims take precedence; if AppID is non-empty
+// it is parsed as int64. Falls back to ServerClaims for HMAC-authenticated
+// routes. Returns a non-nil error when neither context is populated.
+func resolveAppID(r *http.Request) (int64, error) {
+	if claims := auth.ClaimsFromContext(r.Context()); claims.AppID != "" {
+		return strconv.ParseInt(claims.AppID, 10, 64)
+	}
+	if sc := auth.ServerClaimsFromContext(r.Context()); sc != nil {
+		return sc.AppID, nil
+	}
+	return 0, errors.New("no authentication claims in context")
+}
+
+// HandleEndConference implements POST /v1/conferences/{conferenceID}/end and
+// POST /v1/server/conferences/{conferenceID}/end. The URL parameter
+// {conferenceID} is the conference external_id (SDK-facing string identifier).
+// The handler:
+//  1. Resolves the caller's app ID from JWT Claims or ServerClaims
+//  2. Looks up the conference by external_id (→ 404 if absent)
+//  3. Verifies app ownership (→ 403 on mismatch)
+//  4. Sets ended_at = now() idempotently (no-op if already ended)
+//  5. Fires the eMOS trigger asynchronously (non-blocking)
+//  6. Returns 202
 func HandleEndConference(pool *pgxpool.Pool, log *logrus.Logger, triggerEMOS EMOSTriggerFn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		externalID := chi.URLParam(r, "conferenceID")
-		claims := auth.ClaimsFromContext(r.Context())
 
-		jwtAppID, err := strconv.ParseInt(claims.AppID, 10, 64)
+		callerAppID, err := resolveAppID(r)
 		if err != nil {
 			writeConferenceError(w, http.StatusUnauthorized, "invalid app_id in token")
 			return
@@ -53,7 +68,7 @@ func HandleEndConference(pool *pgxpool.Pool, log *logrus.Logger, triggerEMOS EMO
 			return
 		}
 
-		if confAppID != jwtAppID {
+		if confAppID != callerAppID {
 			writeConferenceError(w, http.StatusForbidden, "access denied")
 			return
 		}

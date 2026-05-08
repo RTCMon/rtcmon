@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -22,7 +23,7 @@ const testSecret = "test-secret-key"
 func newTestServer() *Server {
 	log := logrus.New()
 	log.SetOutput(io.Discard)
-	return NewServer(nil, nil, nil, log, testSecret, nil, nil)
+	return NewServer(context.TODO(), nil, nil, log, testSecret, nil, nil, nil)
 }
 
 // makeValidToken generates a signed HS256 JWT with all required claims.
@@ -196,7 +197,7 @@ func TestLoggingMiddleware_IncludesRequestID(t *testing.T) {
 	log.SetOutput(out)
 	log.SetFormatter(&logrus.JSONFormatter{})
 
-	srv := NewServer(nil, nil, nil, log, testSecret, nil, nil)
+	srv := NewServer(context.TODO(), nil, nil, log, testSecret, nil, nil, nil)
 	srv.router.Get("/test", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})

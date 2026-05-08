@@ -78,12 +78,28 @@ func newServeCmd() *cobra.Command {
 			)
 			defer wp.Shutdown()
 
+			// Create eMOS trigger: non-blocking send to a buffered channel.
+			// The goroutine body is a stub; real eMOS computation is BE-017+.
+			emosCh := make(chan int64, 256)
+			go func() {
+				for confID := range emosCh {
+					log.WithField("conference_id", confID).Info("eMOS computation triggered (stub)")
+				}
+			}()
+			emosTrigger := func(confID int64) {
+				select {
+				case emosCh <- confID:
+				default:
+					log.WithField("conference_id", confID).Warn("eMOS: channel full, dropping job")
+				}
+			}
+
 			// Create and start HTTP server
 			rl := ratelimit.New(client, ratelimit.Config{
 				Max:        cfg.RateLimit.Max,
 				WindowSecs: cfg.RateLimit.WindowSecs,
 			}, log)
-			srv := server.NewServer(ctx, pool, client, log, cfg.Auth.JWTSecret, rl, wp.Enqueue)
+			srv := server.NewServer(ctx, pool, client, log, cfg.Auth.JWTSecret, rl, wp.Enqueue, emosTrigger)
 			return srv.Listen(cfg.Server.Port)
 		},
 	}

@@ -25,9 +25,10 @@ type Server struct {
 	jwtSecret   string
 	rateLimiter *ratelimit.RateLimiter
 	enqueue     handler.EnqueueFn
+	emosTrigger handler.EMOSTriggerFn
 }
 
-func NewServer(ctx context.Context, db *pgxpool.Pool, redis *redis.Client, log *logrus.Logger, jwtSecret string, rl *ratelimit.RateLimiter, enqueue handler.EnqueueFn) *Server {
+func NewServer(ctx context.Context, db *pgxpool.Pool, redis *redis.Client, log *logrus.Logger, jwtSecret string, rl *ratelimit.RateLimiter, enqueue handler.EnqueueFn, emosTrigger handler.EMOSTriggerFn) *Server {
 	r := chi.NewRouter()
 
 	s := &Server{
@@ -38,6 +39,7 @@ func NewServer(ctx context.Context, db *pgxpool.Pool, redis *redis.Client, log *
 		jwtSecret:   jwtSecret,
 		rateLimiter: rl,
 		enqueue:     enqueue,
+		emosTrigger: emosTrigger,
 	}
 
 	s.setupMiddleware()
@@ -63,6 +65,8 @@ func (s *Server) setupRoutes() {
 			r.Use(s.rateLimiter.Middleware())
 		}
 		r.Post("/v1/events", handler.HandleEvents(s.log, s.enqueue))
+		r.Post("/v1/conferences/{conferenceID}/end",
+			handler.HandleEndConference(s.db, s.log, s.emosTrigger))
 	})
 }
 

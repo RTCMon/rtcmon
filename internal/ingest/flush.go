@@ -64,7 +64,7 @@ type Flusher struct {
 	deadLetterDir string
 
 	ewmaMu    sync.Mutex
-	ewmaState map[string]*ewmaState // keyed by connection external_id
+	ewmaState map[string]*ewmaState // keyed by connectionID + "|" + source
 }
 
 // New creates a Flusher. deadLetterDir is created on first use if absent.

@@ -49,6 +49,9 @@ func newServeCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("load config: %w", err)
 			}
+			if cfg.Auth.JWTSecret == "" {
+				return fmt.Errorf("AUTH_JWT_SECRET is required for the ingest API")
+			}
 
 			log := logger.New(cfg.Log.Level)
 			log.WithField("port", cfg.Server.Port).Info("ingest-api starting")

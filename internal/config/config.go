@@ -14,6 +14,7 @@ type Config struct {
 	DB              DBConfig
 	Redis           RedisConfig
 	Auth            AuthConfig
+	Session         SessionConfig
 	RateLimit       RateLimitConfig
 	ServerRateLimit RateLimitConfig `mapstructure:"server_rate_limit"`
 	Worker          WorkerConfig
@@ -53,6 +54,10 @@ type WorkerConfig struct {
 	FlushIntervalMs int    `mapstructure:"flush_interval_ms"`
 	ChannelCap      int    `mapstructure:"channel_cap"`
 	DeadLetterDir   string `mapstructure:"dead_letter_dir"`
+}
+
+type SessionConfig struct {
+	TTLSeconds int `mapstructure:"ttl_seconds"`
 }
 
 type LogConfig struct {
@@ -121,6 +126,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("worker.flush_interval_ms", 100)
 	v.SetDefault("worker.dead_letter_dir", "./dead_letter/")
 
+	v.SetDefault("session.ttl_seconds", 28800) // 8 hours
+
 	v.SetDefault("log.level", "info")
 }
 
@@ -138,11 +145,9 @@ func applyComputedDefaults(cfg *Config) {
 }
 
 // validate checks that required configuration values are set.
+// AUTH_JWT_SECRET is validated here only when present; services that require
+// it (ingest-api) must perform their own startup check.
 func validate(cfg *Config) error {
-	if cfg.Auth.JWTSecret == "" {
-		return fmt.Errorf("auth.jwt_secret is required: set AUTH_JWT_SECRET environment variable")
-	}
-
 	if cfg.Auth.ServerMasterKey != "" {
 		decoded, err := base64.StdEncoding.DecodeString(cfg.Auth.ServerMasterKey)
 		if err != nil {

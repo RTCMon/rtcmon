@@ -3,7 +3,6 @@ package config_test
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/RTCMon/rtcmon/internal/config"
@@ -131,19 +130,16 @@ func TestLoad_JWTSecret_FromEnv(t *testing.T) {
 }
 
 func TestLoad_JWTSecret_Missing(t *testing.T) {
+	// JWT secret is optional at config load time; services validate it
+	// themselves at startup (ingest-api requires it, query-api does not).
 	clearEnv(t)
 
 	cfg, err := config.Load()
-	if err == nil {
-		t.Fatalf("Load: expected error for missing JWT secret, got nil")
+	if err != nil {
+		t.Fatalf("Load: unexpected error with no JWT secret: %v", err)
 	}
-
-	if cfg != nil {
-		t.Errorf("Config: expected nil, got %+v", cfg)
-	}
-
-	if !strings.Contains(err.Error(), "auth.jwt_secret is required") {
-		t.Errorf("Error message: got %q, want to contain 'auth.jwt_secret is required'", err.Error())
+	if cfg.Auth.JWTSecret != "" {
+		t.Errorf("Auth.JWTSecret: expected empty, got %q", cfg.Auth.JWTSecret)
 	}
 }
 
@@ -152,16 +148,21 @@ func TestLoad_JWTSecret_Empty(t *testing.T) {
 	t.Setenv("AUTH_JWT_SECRET", "")
 
 	cfg, err := config.Load()
-	if err == nil {
-		t.Fatalf("Load: expected error for empty JWT secret, got nil")
+	if err != nil {
+		t.Fatalf("Load: unexpected error with empty JWT secret: %v", err)
 	}
-
-	if cfg != nil {
-		t.Errorf("Config: expected nil, got %+v", cfg)
+	if cfg.Auth.JWTSecret != "" {
+		t.Errorf("Auth.JWTSecret: expected empty, got %q", cfg.Auth.JWTSecret)
 	}
+}
 
-	if !strings.Contains(err.Error(), "auth.jwt_secret is required") {
-		t.Errorf("Error message: got %q, want to contain 'auth.jwt_secret is required'", err.Error())
+func TestLoad_Session_DefaultTTL(t *testing.T) {
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Session.TTLSeconds != 28800 {
+		t.Errorf("Session.TTLSeconds: got %d, want 28800", cfg.Session.TTLSeconds)
 	}
 }
 

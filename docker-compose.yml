@@ -1,0 +1,56 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: rtcmon
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ingest-api:
+    build:
+      context: .
+      dockerfile: services/ingest-api/Dockerfile
+    environment:
+      DB_URL: postgres://postgres:postgres@postgres:5432/rtcmon
+      REDIS_URL: redis://redis:6379/0
+      SERVER_PORT: 8080
+      LOG_LEVEL: info
+      WORKER_COUNT: 4
+      WORKER_BATCH_SIZE: 500
+      WORKER_FLUSH_INTERVAL_MS: 100
+      WORKER_CHANNEL_CAP: 8000
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

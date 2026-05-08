@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	"github.com/sirupsen/logrus"
 )
 
 // serverClaimsKey is an unexported context key for ServerClaims. Uses a
@@ -52,6 +53,7 @@ func WithServerClaims(r *http.Request, sc *ServerClaims) *http.Request {
 // code uses the defaultLookup / defaultNonce methods wired to real DB/Redis.
 type apiKeyMiddleware struct {
 	masterKey []byte
+	log       *logrus.Logger
 
 	// lookupFn resolves an API key to its app identity and encrypted secret.
 	// Returns errKeyNotFound when the key does not exist.
@@ -73,9 +75,10 @@ var errKeyNotFound = errors.New("apikey: server_api_key not found")
 //
 // masterKey must be exactly 32 bytes (validated by config.Load when
 // SERVER_MASTER_KEY is set). Callers should not pass a nil or short masterKey.
-func AuthenticateAPIKey(db *pgxpool.Pool, rdb *redis.Client, masterKey []byte) func(http.Handler) http.Handler {
+func AuthenticateAPIKey(db *pgxpool.Pool, rdb *redis.Client, masterKey []byte, log *logrus.Logger) func(http.Handler) http.Handler {
 	m := &apiKeyMiddleware{
 		masterKey: masterKey,
+		log:       log,
 		nowFn:     time.Now,
 	}
 	m.lookupFn = func(ctx context.Context, apiKey string) (int64, int64, string, error) {
@@ -149,7 +152,9 @@ func (m *apiKeyMiddleware) handler() func(http.Handler) http.Handler {
 				writeAPIKeyError(w, http.StatusUnauthorized, "duplicate request")
 				return
 			}
-			// nonceErr != nil → Redis is down; fail-open (nonce check skipped).
+			if nonceErr != nil {
+				m.log.WithError(nonceErr).Warn("apikey: Redis nonce check failed, replay protection disabled")
+			}
 
 			// Step 7: Stamp claims and call next handler.
 			claims := &ServerClaims{AppID: appID, OrgID: orgID, APIKey: apiKey}

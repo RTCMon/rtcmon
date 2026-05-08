@@ -89,7 +89,7 @@ func (s *Server) setupRoutes() {
 	// make decryption impossible and silently accept invalid requests.
 	if len(s.serverMasterKey) == 32 {
 		s.router.Group(func(r chi.Router) {
-			r.Use(auth.AuthenticateAPIKey(s.db, s.redis, s.serverMasterKey))
+			r.Use(auth.AuthenticateAPIKey(s.db, s.redis, s.serverMasterKey, s.log))
 			if s.serverRateLimiter != nil {
 				r.Use(s.serverRateLimiter.ServerMiddleware())
 			}

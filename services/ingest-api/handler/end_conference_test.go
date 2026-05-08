@@ -460,7 +460,7 @@ func TestServerEndConference_MissingHMAC(t *testing.T) {
 	masterKey := []byte("abcdefghijklmnopqrstuvwxyz012345") // 32 bytes
 	r := chi.NewRouter()
 	r.Group(func(r chi.Router) {
-		r.Use(auth.AuthenticateAPIKey(nil, nil, masterKey))
+		r.Use(auth.AuthenticateAPIKey(nil, nil, masterKey, endConfLog()))
 		r.Post("/v1/server/conferences/{conferenceID}/end",
 			handler.HandleEndConference(nil, endConfLog(), nil))
 	})

@@ -19,6 +19,7 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
+	"github.com/sirupsen/logrus"
 )
 
 // testMasterKey32 is a 32-byte key for encryption in tests.
@@ -67,6 +68,7 @@ func newStubMiddleware(t *testing.T, lookupOK bool, rdb *redis.Client) (*apiKeyM
 
 	m := &apiKeyMiddleware{
 		masterKey: testMasterKey32,
+		log:       logrus.New(),
 		nowFn:     time.Now,
 		lookupFn: func(_ context.Context, apiKey string) (int64, int64, string, error) {
 			if !lookupOK {

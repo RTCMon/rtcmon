@@ -3,7 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -76,7 +80,7 @@ func newServeCmd() *cobra.Command {
 				flusher.Flush,
 				log,
 			)
-			defer wp.Shutdown()
+			// wp.Shutdown() is called inside serveWithShutdown after signal.
 
 			// Create eMOS trigger: non-blocking send to a buffered channel.
 			// The goroutine body is a stub; real eMOS computation is BE-017+.
@@ -94,13 +98,21 @@ func newServeCmd() *cobra.Command {
 				}
 			}
 
-			// Create and start HTTP server
+			// Wire signal handling and HTTP server.
 			rl := ratelimit.New(client, ratelimit.Config{
 				Max:        cfg.RateLimit.Max,
 				WindowSecs: cfg.RateLimit.WindowSecs,
 			}, log)
 			srv := server.NewServer(ctx, pool, client, log, cfg.Auth.JWTSecret, rl, wp.Enqueue, emosTrigger)
-			return srv.Listen(cfg.Server.Port)
+
+			sigCh := make(chan os.Signal, 1)
+			signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
+
+			httpSrv := &http.Server{
+				Addr:    fmt.Sprintf(":%d", cfg.Server.Port),
+				Handler: srv,
+			}
+			return serveWithShutdown(httpSrv, wp, emosCh, sigCh, 30*time.Second, log)
 		},
 	}
 }

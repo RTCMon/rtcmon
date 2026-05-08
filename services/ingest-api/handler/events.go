@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -9,18 +10,27 @@ import (
 
 	"github.com/RTCMon/rtcmon/internal/auth"
 	"github.com/RTCMon/rtcmon/internal/model"
+	"github.com/RTCMon/rtcmon/internal/worker"
 )
 
 const maxEvents = 200
 
-// HandleEvents decodes and validates the POST /v1/events request body.
-// Auth is enforced by the router-level middleware; this handler only sees
-// requests that have already passed JWT verification. It returns 202 on
-// success and 400 with a JSON error body on validation failure.
-func HandleEvents(log *logrus.Logger) http.HandlerFunc {
+// EnqueueFn is the signature of worker.Pool.Enqueue. Accepting a function
+// type (rather than *worker.Pool) keeps the handler package free of the
+// worker import in tests and makes stubbing trivial.
+type EnqueueFn func(model.IngestPayload) error
+
+// HandleEvents decodes and validates the POST /v1/events request body, stamps
+// JWT claims onto the payload, and enqueues it for async DB flush. Auth is
+// enforced by the router-level middleware. Returns:
+//   - 202 on successful enqueue
+//   - 429 (Retry-After: 1) when the worker channel is full
+//   - 400 on validation failure
+//
+// When enqueue is nil the handler returns 202 without enqueueing (used by
+// unit tests that only exercise validation).
+func HandleEvents(log *logrus.Logger, enqueue EnqueueFn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Claims are available for downstream use (e.g. scoping to app_id).
-		// ClaimsFromContext never panics — returns zero-value when absent.
 		claims := auth.ClaimsFromContext(r.Context())
 		log.WithField("app_id", claims.AppID).Debug("events: request received")
 
@@ -33,6 +43,24 @@ func HandleEvents(log *logrus.Logger) http.HandlerFunc {
 		if err := validatePayload(&payload); err != nil {
 			writeEventError(w, http.StatusBadRequest, err.Error())
 			return
+		}
+
+		if enqueue != nil {
+			payload.AppID = claims.AppID
+			payload.UserID = claims.UserID
+
+			if err := enqueue(payload); err != nil {
+				if errors.Is(err, worker.ErrChannelFull) {
+					w.Header().Set("Content-Type", "application/json")
+					w.Header().Set("Retry-After", "1")
+					w.WriteHeader(http.StatusTooManyRequests)
+					body, _ := json.Marshal(map[string]string{"error": "service busy, retry later"})
+					_, _ = w.Write(body)
+					return
+				}
+				// Unexpected enqueue error — log but still accept (fail-open).
+				log.WithError(err).Warn("events: enqueue failed, accepting anyway")
+			}
 		}
 
 		w.WriteHeader(http.StatusAccepted)

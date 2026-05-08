@@ -24,9 +24,10 @@ type Server struct {
 	log         *logrus.Logger
 	jwtSecret   string
 	rateLimiter *ratelimit.RateLimiter
+	enqueue     handler.EnqueueFn
 }
 
-func NewServer(ctx context.Context, db *pgxpool.Pool, redis *redis.Client, log *logrus.Logger, jwtSecret string, rl *ratelimit.RateLimiter) *Server {
+func NewServer(ctx context.Context, db *pgxpool.Pool, redis *redis.Client, log *logrus.Logger, jwtSecret string, rl *ratelimit.RateLimiter, enqueue handler.EnqueueFn) *Server {
 	r := chi.NewRouter()
 
 	s := &Server{
@@ -36,6 +37,7 @@ func NewServer(ctx context.Context, db *pgxpool.Pool, redis *redis.Client, log *
 		log:         log,
 		jwtSecret:   jwtSecret,
 		rateLimiter: rl,
+		enqueue:     enqueue,
 	}
 
 	s.setupMiddleware()
@@ -60,7 +62,7 @@ func (s *Server) setupRoutes() {
 		if s.rateLimiter != nil {
 			r.Use(s.rateLimiter.Middleware())
 		}
-		r.Post("/v1/events", handler.HandleEvents(s.log))
+		r.Post("/v1/events", handler.HandleEvents(s.log, s.enqueue))
 	})
 }
 

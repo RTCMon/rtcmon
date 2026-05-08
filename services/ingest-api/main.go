@@ -83,7 +83,7 @@ func newServeCmd() *cobra.Command {
 				Max:        cfg.RateLimit.Max,
 				WindowSecs: cfg.RateLimit.WindowSecs,
 			}, log)
-			srv := server.NewServer(ctx, pool, client, log, cfg.Auth.JWTSecret, rl)
+			srv := server.NewServer(ctx, pool, client, log, cfg.Auth.JWTSecret, rl, wp.Enqueue)
 			return srv.Listen(cfg.Server.Port)
 		},
 	}

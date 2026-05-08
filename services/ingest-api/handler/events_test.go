@@ -47,7 +47,7 @@ func validPayload() model.IngestPayload {
 func TestValidation_ValidPayload(t *testing.T) {
 	req := makeEventsRequest(t, validPayload())
 	w := httptest.NewRecorder()
-	HandleEvents(newTestLogger())(w, req)
+	HandleEvents(newTestLogger(), nil)(w, req)
 
 	if w.Code != http.StatusAccepted {
 		t.Errorf("want 202, got %d", w.Code)
@@ -59,7 +59,7 @@ func TestValidation_MissingConferenceID(t *testing.T) {
 	p.ConferenceID = ""
 	req := makeEventsRequest(t, p)
 	w := httptest.NewRecorder()
-	HandleEvents(newTestLogger())(w, req)
+	HandleEvents(newTestLogger(), nil)(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("want 400, got %d", w.Code)
@@ -74,7 +74,7 @@ func TestValidation_MissingSessionID(t *testing.T) {
 	p.SessionID = ""
 	req := makeEventsRequest(t, p)
 	w := httptest.NewRecorder()
-	HandleEvents(newTestLogger())(w, req)
+	HandleEvents(newTestLogger(), nil)(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("want 400, got %d", w.Code)
@@ -86,7 +86,7 @@ func TestValidation_MissingConnectionID(t *testing.T) {
 	p.ConnectionID = ""
 	req := makeEventsRequest(t, p)
 	w := httptest.NewRecorder()
-	HandleEvents(newTestLogger())(w, req)
+	HandleEvents(newTestLogger(), nil)(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("want 400, got %d", w.Code)
@@ -98,7 +98,7 @@ func TestValidation_EmptyEvents(t *testing.T) {
 	p.Events = []model.StatSnapshot{}
 	req := makeEventsRequest(t, p)
 	w := httptest.NewRecorder()
-	HandleEvents(newTestLogger())(w, req)
+	HandleEvents(newTestLogger(), nil)(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("want 400, got %d", w.Code)
@@ -116,7 +116,7 @@ func TestValidation_OversizedEvents(t *testing.T) {
 	}
 	req := makeEventsRequest(t, p)
 	w := httptest.NewRecorder()
-	HandleEvents(newTestLogger())(w, req)
+	HandleEvents(newTestLogger(), nil)(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("want 400, got %d", w.Code)
@@ -130,7 +130,7 @@ func TestValidation_MalformedJSON(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/v1/events", strings.NewReader("{bad json}"))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
-	HandleEvents(newTestLogger())(w, req)
+	HandleEvents(newTestLogger(), nil)(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("want 400, got %d", w.Code)
@@ -145,7 +145,7 @@ func TestValidation_NegativeTimestamp(t *testing.T) {
 	p.Events[0].TS = -1
 	req := makeEventsRequest(t, p)
 	w := httptest.NewRecorder()
-	HandleEvents(newTestLogger())(w, req)
+	HandleEvents(newTestLogger(), nil)(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("want 400, got %d", w.Code)
@@ -157,7 +157,7 @@ func TestValidation_ZeroTimestamp(t *testing.T) {
 	p.Events[0].TS = 0
 	req := makeEventsRequest(t, p)
 	w := httptest.NewRecorder()
-	HandleEvents(newTestLogger())(w, req)
+	HandleEvents(newTestLogger(), nil)(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("want 400, got %d", w.Code)
@@ -177,7 +177,7 @@ func TestValidation_ExtraFields(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/v1/events", bytes.NewReader(b))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
-	HandleEvents(newTestLogger())(w, req)
+	HandleEvents(newTestLogger(), nil)(w, req)
 
 	if w.Code != http.StatusAccepted {
 		t.Errorf("want 202 for extra fields, got %d; body: %s", w.Code, w.Body.String())
@@ -194,7 +194,7 @@ func TestValidation_MinimalValidPayload(t *testing.T) {
 	}
 	req := makeEventsRequest(t, p)
 	w := httptest.NewRecorder()
-	HandleEvents(newTestLogger())(w, req)
+	HandleEvents(newTestLogger(), nil)(w, req)
 
 	if w.Code != http.StatusAccepted {
 		t.Errorf("want 202, got %d; body: %s", w.Code, w.Body.String())
@@ -206,7 +206,7 @@ func TestValidation_NegativeNumericField(t *testing.T) {
 	p.Events[0].RTTMs = -1.0
 	req := makeEventsRequest(t, p)
 	w := httptest.NewRecorder()
-	HandleEvents(newTestLogger())(w, req)
+	HandleEvents(newTestLogger(), nil)(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("want 400 for negative rtt_ms, got %d", w.Code)
@@ -228,7 +228,7 @@ func TestClaimsInHandler(t *testing.T) {
 
 	// 1. Without claims in context — should not panic.
 	w := httptest.NewRecorder()
-	HandleEvents(newTestLogger())(w, req)
+	HandleEvents(newTestLogger(), nil)(w, req)
 	// We expect 202 since the payload is valid.
 	if w.Code != http.StatusAccepted {
 		t.Errorf("want 202, got %d", w.Code)

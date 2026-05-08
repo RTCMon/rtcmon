@@ -22,7 +22,7 @@ const testSecret = "test-secret-key"
 func newTestServer() *Server {
 	log := logrus.New()
 	log.SetOutput(io.Discard)
-	return NewServer(nil, nil, nil, log, testSecret, nil)
+	return NewServer(nil, nil, nil, log, testSecret, nil, nil)
 }
 
 // makeValidToken generates a signed HS256 JWT with all required claims.
@@ -196,7 +196,7 @@ func TestLoggingMiddleware_IncludesRequestID(t *testing.T) {
 	log.SetOutput(out)
 	log.SetFormatter(&logrus.JSONFormatter{})
 
-	srv := NewServer(nil, nil, nil, log, testSecret, nil)
+	srv := NewServer(nil, nil, nil, log, testSecret, nil, nil)
 	srv.router.Get("/test", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})

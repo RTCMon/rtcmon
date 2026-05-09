@@ -54,6 +54,7 @@ func NewServer(
 func (s *Server) setupMiddleware() {
 	s.router.Use(middleware.RequestID)
 	s.router.Use(loggingMiddleware(s.log))
+	s.router.Use(csrfMiddleware())
 	s.router.Use(middleware.Recoverer)
 }
 
@@ -107,6 +108,33 @@ func (s *Server) sessionMiddleware() func(http.Handler) http.Handler {
 			}
 
 			next.ServeHTTP(w, r.WithContext(session.WithContext(r.Context(), data)))
+		})
+	}
+}
+
+// csrfMiddleware rejects state-mutating requests whose Origin header is present
+// but does not match the server's own scheme+host. Requests without an Origin
+// header (programmatic API clients) pass through; SameSite=Strict cookies
+// prevent cross-site cookie forwarding for browser requests.
+func csrfMiddleware() func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.Method {
+			case http.MethodPost, http.MethodPatch, http.MethodPut, http.MethodDelete:
+				if origin := r.Header.Get("Origin"); origin != "" {
+					scheme := "http"
+					if r.TLS != nil {
+						scheme = "https"
+					}
+					if origin != scheme+"://"+r.Host {
+						w.Header().Set("Content-Type", "application/json")
+						w.WriteHeader(http.StatusForbidden)
+						_, _ = w.Write([]byte(`{"error":"invalid origin"}`))
+						return
+					}
+				}
+			}
+			next.ServeHTTP(w, r)
 		})
 	}
 }

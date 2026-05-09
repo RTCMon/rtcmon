@@ -74,8 +74,9 @@ func (s *Server) setupRoutes() {
 		r.Get("/auth/me", handler.HandleMe())
 		r.Patch("/auth/me", handler.HandlePatchMe(s.db, s.sessions, s.log))
 
-		// Conference endpoints — BE-024.
+		// Conference endpoints — BE-024/BE-025.
 		r.Get("/v1/apps/{appId}/conferences", handler.HandleListConferences(s.db, s.log))
+		r.Get("/v1/conferences/{conferenceId}", handler.HandleGetConference(s.db, s.log))
 
 		// Server API key management — BE-021.
 		r.Route("/v1/orgs/{orgId}/apps/{appId}", func(r chi.Router) {

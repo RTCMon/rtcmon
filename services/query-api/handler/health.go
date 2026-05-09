@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -12,33 +14,49 @@ import (
 	"github.com/RTCMon/rtcmon/internal/db"
 )
 
+// HealthResponse is the JSON body returned by GET /health.
+type HealthResponse struct {
+	Status string `json:"status"`
+	DB     string `json:"db"`
+	Redis  string `json:"redis"`
+}
+
+// HandleHealth returns a handler that pings Postgres and Redis and reports
+// their status. Returns 200 when both are reachable, 503 otherwise.
 func HandleHealth(pool *pgxpool.Pool, rdb *redis.Client, log *logrus.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		dbStatus := "ok"
-		if err := db.Ping(r.Context(), pool); err != nil {
-			log.WithError(err).Warn("health: db ping failed")
-			dbStatus = "error"
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+
+		resp := &HealthResponse{
+			Status: "ok",
+			DB:     "ok",
+			Redis:  "ok",
 		}
 
-		redisStatus := "ok"
-		if err := cache.Ping(r.Context(), rdb); err != nil {
-			log.WithError(err).Warn("health: redis ping failed")
-			redisStatus = "error"
+		if err := db.Ping(ctx, pool); err != nil {
+			resp.DB = "error"
+			resp.Status = "error"
+			if log != nil {
+				log.WithError(err).Warn("health: db ping failed")
+			}
 		}
 
-		status := http.StatusOK
-		overall := "ok"
-		if dbStatus != "ok" || redisStatus != "ok" {
-			status = http.StatusServiceUnavailable
-			overall = "degraded"
+		if err := cache.Ping(ctx, rdb); err != nil {
+			resp.Redis = "error"
+			resp.Status = "error"
+			if log != nil {
+				log.WithError(err).Warn("health: redis ping failed")
+			}
+		}
+
+		httpStatus := http.StatusOK
+		if resp.Status == "error" {
+			httpStatus = http.StatusServiceUnavailable
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(status)
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"status": overall,
-			"db":     dbStatus,
-			"redis":  redisStatus,
-		})
+		w.WriteHeader(httpStatus)
+		_ = json.NewEncoder(w).Encode(resp)
 	}
 }

@@ -67,6 +67,9 @@ func (s *Server) setupRoutes() {
 	s.router.Post("/auth/login", handler.HandleLogin(s.db, s.sessions, s.log))
 	s.router.Post("/auth/logout", handler.HandleLogout(s.sessions))
 
+	// Team invitations — unauthenticated accept endpoint.
+	s.router.Post("/v1/team/invitations/{token}/accept", handler.HandleAcceptInvitation(s.db, s.sessions, s.log))
+
 	// Session-required routes.
 	s.router.Group(func(r chi.Router) {
 		r.Use(s.sessionMiddleware())
@@ -100,6 +103,14 @@ func (s *Server) setupRoutes() {
 			r.Delete("/server-key", handler.HandleDeleteServerKey(s.db, s.log))
 			r.Post("/rotate-server-key", handler.HandleRotateServerKey(s.db, s.serverMasterKey, s.log))
 		})
+
+		// Team management endpoints — BE-037.
+		r.Get("/v1/team/members", handler.HandleListMembers(s.db, s.log))
+		r.Patch("/v1/team/members/{userId}/role", handler.HandleChangeRole(s.db, s.log))
+		r.Delete("/v1/team/members/{userId}", handler.HandleRemoveMember(s.db, s.log))
+		r.Post("/v1/team/invitations", handler.HandleCreateInvitation(s.db, s.log))
+		r.Get("/v1/team/invitations", handler.HandleListInvitations(s.db, s.log))
+		r.Delete("/v1/team/invitations/{token}", handler.HandleRevokeInvitation(s.db, s.log))
 	})
 }
 

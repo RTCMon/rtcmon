@@ -60,6 +60,13 @@ type AcceptInvitationRequest struct {
 // HandleListMembers returns a handler for GET /v1/team/members.
 // Lists all organization members with their roles.
 // Auth: Session required (all roles can read).
+// @Summary List Members
+// @Description List Members endpoint
+// @Tags v1
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /v1/team/members [get]
 func HandleListMembers(db *pgxpool.Pool, log *logrus.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sess := session.FromContext(r.Context())
@@ -102,6 +109,13 @@ func HandleListMembers(db *pgxpool.Pool, log *logrus.Logger) http.HandlerFunc {
 
 // HandleChangeRole returns a handler for PATCH /v1/team/members/:userId/role.
 // Changes a member's role. Admin-only. Cannot demote the last admin.
+// @Summary Change Role
+// @Description Change Role endpoint
+// @Tags v1
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /v1/team/members/{userId}/role [patch]
 func HandleChangeRole(db *pgxpool.Pool, log *logrus.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sess := session.FromContext(r.Context())
@@ -209,6 +223,13 @@ func HandleChangeRole(db *pgxpool.Pool, log *logrus.Logger) http.HandlerFunc {
 
 // HandleRemoveMember returns a handler for DELETE /v1/team/members/:userId.
 // Removes a member from the organization. Admin-only. Cannot demote the last admin.
+// @Summary Remove Member
+// @Description Remove Member endpoint
+// @Tags v1
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /v1/team/members/{userId} [delete]
 func HandleRemoveMember(db *pgxpool.Pool, log *logrus.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sess := session.FromContext(r.Context())
@@ -287,6 +308,13 @@ func HandleRemoveMember(db *pgxpool.Pool, log *logrus.Logger) http.HandlerFunc {
 
 // HandleCreateInvitation returns a handler for POST /v1/team/invitations.
 // Creates a new invitation with a 32-byte token and 7-day TTL. Admin-only.
+// @Summary Create Invitation
+// @Description Create Invitation endpoint
+// @Tags v1
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /v1/team/invitations [post]
 func HandleCreateInvitation(db *pgxpool.Pool, log *logrus.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sess := session.FromContext(r.Context())
@@ -411,6 +439,13 @@ func HandleListInvitations(db *pgxpool.Pool, log *logrus.Logger) http.HandlerFun
 
 // HandleRevokeInvitation returns a handler for DELETE /v1/team/invitations/:token.
 // Revokes a pending invitation. Admin-only.
+// @Summary Revoke Invitation
+// @Description Revoke Invitation endpoint
+// @Tags v1
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /v1/team/invitations/{token} [delete]
 func HandleRevokeInvitation(db *pgxpool.Pool, log *logrus.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sess := session.FromContext(r.Context())
@@ -446,6 +481,13 @@ func HandleRevokeInvitation(db *pgxpool.Pool, log *logrus.Logger) http.HandlerFu
 // HandleAcceptInvitation returns a handler for POST /v1/team/invitations/:token/accept.
 // Accepts an invitation, creates the user, and adds them to the organization.
 // No authentication required (first-time user signup via invitation).
+// @Summary Accept Invitation
+// @Description Accept Invitation endpoint
+// @Tags v1
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /v1/team/invitations/{token}/accept [post]
 func HandleAcceptInvitation(
 	db *pgxpool.Pool,
 	sessions *session.Store,

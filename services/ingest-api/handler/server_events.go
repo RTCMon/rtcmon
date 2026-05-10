@@ -19,6 +19,13 @@ import (
 // trusts that ServerClaims are present in the context. Body validation reuses
 // the same rules as HandleEvents. AppID is derived from the DB-resolved claims
 // (not a JWT), and Source is always stamped as "server" for provenance.
+// @Summary Server Events
+// @Description Server Events endpoint
+// @Tags v1
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /v1/server/events [post]
 func HandleServerEvents(log *logrus.Logger, enqueue EnqueueFn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		claims := auth.ServerClaimsFromContext(r.Context())

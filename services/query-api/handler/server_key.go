@@ -90,6 +90,13 @@ func HandleGenerateServerKey(db *pgxpool.Pool, masterKey []byte, log *logrus.Log
 
 // HandleGetServerKey handles GET /v1/orgs/:orgId/apps/:appId/server-key.
 // Any authenticated org member. Returns metadata only — never the secret.
+// @Summary Get Server Key
+// @Description Get Server Key endpoint
+// @Tags v1
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /v1/orgs/{orgId}/apps/{appId}/server-key [get]
 func HandleGetServerKey(db *pgxpool.Pool, log *logrus.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		_, orgID, appID, ok := extractKeyParams(w, r)
@@ -170,6 +177,13 @@ func HandleDeleteServerKey(db *pgxpool.Pool, log *logrus.Logger) http.HandlerFun
 
 // HandleRotateServerKey handles POST /v1/orgs/:orgId/apps/:appId/rotate-server-key.
 // Admin only. Generates a new key pair atomically. Returns 404 if no key exists yet.
+// @Summary Rotate Server Key
+// @Description Rotate Server Key endpoint
+// @Tags v1
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /v1/orgs/{orgId}/apps/{appId}/rotate-server-key [post]
 func HandleRotateServerKey(db *pgxpool.Pool, masterKey []byte, log *logrus.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sess, orgID, appID, ok := extractKeyParams(w, r)

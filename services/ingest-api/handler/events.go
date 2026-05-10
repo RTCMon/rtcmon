@@ -29,6 +29,13 @@ type EnqueueFn func(model.IngestPayload) error
 //
 // When enqueue is nil the handler returns 202 without enqueueing (used by
 // unit tests that only exercise validation).
+// @Summary Events
+// @Description Events endpoint
+// @Tags v1
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /v1/events [post]
 func HandleEvents(log *logrus.Logger, enqueue EnqueueFn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		claims := auth.ClaimsFromContext(r.Context())

@@ -20,6 +20,13 @@ type HealthResponse struct {
 	Redis  string `json:"redis"`
 }
 
+// @Summary Health
+// @Description Health endpoint
+// @Tags health
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /health [get]
 func HandleHealth(pool *pgxpool.Pool, client *redis.Client, log *logrus.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)

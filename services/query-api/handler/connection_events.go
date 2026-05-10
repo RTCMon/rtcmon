@@ -28,6 +28,13 @@ type ConnectionEventsResponse struct {
 }
 
 // HandleGetConnectionEvents returns a handler for GET /v1/connections/{connectionId}/events.
+// @Summary Get Connection Events
+// @Description Get Connection Events endpoint
+// @Tags v1
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /v1/connections/{connectionId}/events [get]
 func HandleGetConnectionEvents(db *pgxpool.Pool, log *logrus.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sess := session.FromContext(r.Context())

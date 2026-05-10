@@ -55,6 +55,13 @@ type ConnectionDetail struct {
 }
 
 // HandleGetConference returns a handler for GET /v1/conferences/{conferenceId}.
+// @Summary Get Conference
+// @Description Get Conference endpoint
+// @Tags v1
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /v1/conferences/{conferenceId} [get]
 func HandleGetConference(db *pgxpool.Pool, log *logrus.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sess := session.FromContext(r.Context())

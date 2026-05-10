@@ -17,6 +17,12 @@ import (
 	"github.com/RTCMon/rtcmon/services/query-api/server"
 )
 
+// @title Query API
+// @version 1.0
+// @description RTCMon Query API
+// @host localhost:8080
+// @BasePath /
+
 func main() {
 	if err := newRootCmd().Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)

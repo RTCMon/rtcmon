@@ -27,6 +27,12 @@ import (
 	"github.com/RTCMon/rtcmon/services/ingest-api/server"
 )
 
+// @title Ingest API
+// @version 1.0
+// @description RTCMon Ingest API
+// @host localhost:8081
+// @BasePath /
+
 func main() {
 	if err := newRootCmd().Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)

@@ -34,6 +34,13 @@ type PatchMeRequest struct {
 
 // HandleRegister is the first-run endpoint: creates the first admin user.
 // Returns 409 if any user already exists.
+// @Summary Register
+// @Description Register endpoint
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /auth/register [post]
 func HandleRegister(db *pgxpool.Pool, sessions *session.Store, log *logrus.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req RegisterRequest
@@ -132,6 +139,13 @@ func HandleRegister(db *pgxpool.Pool, sessions *session.Store, log *logrus.Logge
 }
 
 // HandleLogin authenticates a user and sets a session cookie.
+// @Summary Login
+// @Description Login endpoint
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /auth/login [post]
 func HandleLogin(db *pgxpool.Pool, sessions *session.Store, log *logrus.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req LoginRequest
@@ -189,6 +203,13 @@ func HandleLogin(db *pgxpool.Pool, sessions *session.Store, log *logrus.Logger) 
 }
 
 // HandleLogout clears the session cookie and deletes the session from Redis.
+// @Summary Logout
+// @Description Logout endpoint
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /auth/logout [post]
 func HandleLogout(sessions *session.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		cookie, err := r.Cookie("session")
@@ -201,6 +222,13 @@ func HandleLogout(sessions *session.Store) http.HandlerFunc {
 }
 
 // HandleMe returns the current user's info from the session context.
+// @Summary Me
+// @Description Me endpoint
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /auth/me [get]
 func HandleMe() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sess := session.FromContext(r.Context())

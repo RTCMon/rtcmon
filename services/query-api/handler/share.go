@@ -41,6 +41,13 @@ type ShareTokenItem struct {
 // HandleCreateShareToken returns a handler for POST /v1/conferences/:id/share.
 // Generates a share token for viewing the conference.
 // Auth: Session required (any role).
+// @Summary Create Share Token
+// @Description Create Share Token endpoint
+// @Tags v1
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /v1/conferences/{id}/share [post]
 func HandleCreateShareToken(db *pgxpool.Pool, log *logrus.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sess := session.FromContext(r.Context())
@@ -107,6 +114,13 @@ func HandleCreateShareToken(db *pgxpool.Pool, log *logrus.Logger) http.HandlerFu
 // HandleGetShareToken returns a handler for GET /share/:token.
 // Retrieves a shared conference detail. No session required, but redirects to login if absent.
 // Requires session + org match.
+// @Summary Get Share Token
+// @Description Get Share Token endpoint
+// @Tags share
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /share/{token} [get]
 func HandleGetShareToken(db *pgxpool.Pool, sessions *session.Store, log *logrus.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := chi.URLParam(r, "token")
@@ -184,6 +198,13 @@ func HandleGetShareToken(db *pgxpool.Pool, sessions *session.Store, log *logrus.
 
 // HandleRevokeShareToken returns a handler for DELETE /v1/share-tokens/:token.
 // Revokes a share token. Admin can revoke any; Member can only revoke own.
+// @Summary Revoke Share Token
+// @Description Revoke Share Token endpoint
+// @Tags v1
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /v1/share-tokens/{token} [delete]
 func HandleRevokeShareToken(db *pgxpool.Pool, log *logrus.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sess := session.FromContext(r.Context())
@@ -242,6 +263,13 @@ func HandleRevokeShareToken(db *pgxpool.Pool, log *logrus.Logger) http.HandlerFu
 
 // HandleListShareTokens returns a handler for GET /v1/share-tokens.
 // Lists share tokens for the org. Admin sees all; Member sees only own.
+// @Summary List Share Tokens
+// @Description List Share Tokens endpoint
+// @Tags v1
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /v1/share-tokens [get]
 func HandleListShareTokens(db *pgxpool.Pool, log *logrus.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sess := session.FromContext(r.Context())

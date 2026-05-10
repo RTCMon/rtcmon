@@ -33,6 +33,13 @@ type UserCallsResponse struct {
 }
 
 // HandleGetUserCalls returns a handler for GET /v1/users/{userId}/calls.
+// @Summary Get User Calls
+// @Description Get User Calls endpoint
+// @Tags v1
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /v1/users/{userId}/calls [get]
 func HandleGetUserCalls(db *pgxpool.Pool, log *logrus.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sess := session.FromContext(r.Context())

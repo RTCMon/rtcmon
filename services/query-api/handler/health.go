@@ -23,6 +23,13 @@ type HealthResponse struct {
 
 // HandleHealth returns a handler that pings Postgres and Redis and reports
 // their status. Returns 200 when both are reachable, 503 otherwise.
+// @Summary Health
+// @Description Health endpoint
+// @Tags health
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /health [get]
 func HandleHealth(pool *pgxpool.Pool, rdb *redis.Client, log *logrus.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)

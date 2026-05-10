@@ -29,6 +29,13 @@ type OverviewResponse struct {
 }
 
 // HandleGetAnalyticsOverview returns a handler for GET /v1/apps/{appId}/analytics/overview.
+// @Summary Get Analytics Overview
+// @Description Get Analytics Overview endpoint
+// @Tags v1
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /v1/apps/{appId}/analytics/overview [get]
 func HandleGetAnalyticsOverview(db *pgxpool.Pool, rdb *redis.Client, log *logrus.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sess := session.FromContext(r.Context())

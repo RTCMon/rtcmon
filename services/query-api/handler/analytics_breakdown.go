@@ -43,6 +43,13 @@ type BreakdownResponse struct {
 }
 
 // HandleGetAnalyticsBreakdown returns a handler for GET /v1/apps/{appId}/analytics/breakdown.
+// @Summary Get Analytics Breakdown
+// @Description Get Analytics Breakdown endpoint
+// @Tags v1
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /v1/apps/{appId}/analytics/breakdown [get]
 func HandleGetAnalyticsBreakdown(db *pgxpool.Pool, rdb *redis.Client, log *logrus.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sess := session.FromContext(r.Context())

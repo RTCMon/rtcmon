@@ -46,6 +46,13 @@ type ConnectionStatsResponse struct {
 }
 
 // HandleGetConnectionStats returns a handler for GET /v1/connections/{connectionId}/stats.
+// @Summary Get Connection Stats
+// @Description Get Connection Stats endpoint
+// @Tags v1
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /v1/connections/{connectionId}/stats [get]
 func HandleGetConnectionStats(db *pgxpool.Pool, rdb *redis.Client, log *logrus.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sess := session.FromContext(r.Context())

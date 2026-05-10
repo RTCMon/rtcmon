@@ -117,7 +117,7 @@ func newEndConfServer(t *testing.T, pool *pgxpool.Pool, trigger handler.EMOSTrig
 	r.Group(func(r chi.Router) {
 		r.Use(auth.Authenticate(endConfSecret))
 		r.Post("/v1/conferences/{conferenceID}/end",
-			handler.HandleEndConference(pool, endConfLog(), trigger))
+			handler.HandleEndConference(pool, nil, endConfLog(), trigger))
 	})
 	ts := httptest.NewServer(r)
 	t.Cleanup(ts.Close)
@@ -311,7 +311,7 @@ func newServerEndConfServer(t *testing.T, pool *pgxpool.Pool, claims *auth.Serve
 	r.Post("/v1/server/conferences/{conferenceID}/end",
 		http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			req = auth.WithServerClaims(req, claims)
-			handler.HandleEndConference(pool, endConfLog(), trigger).ServeHTTP(w, req)
+			handler.HandleEndConference(pool, nil, endConfLog(), trigger).ServeHTTP(w, req)
 		}),
 	)
 	ts := httptest.NewServer(r)
@@ -462,7 +462,7 @@ func TestServerEndConference_MissingHMAC(t *testing.T) {
 	r.Group(func(r chi.Router) {
 		r.Use(auth.AuthenticateAPIKey(nil, nil, masterKey, endConfLog()))
 		r.Post("/v1/server/conferences/{conferenceID}/end",
-			handler.HandleEndConference(nil, endConfLog(), nil))
+			handler.HandleEndConference(nil, nil, endConfLog(), nil))
 	})
 	ts := httptest.NewServer(r)
 	defer ts.Close()

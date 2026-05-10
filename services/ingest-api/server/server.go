@@ -81,7 +81,7 @@ func (s *Server) setupRoutes() {
 		}
 		r.Post("/v1/events", handler.HandleEvents(s.log, s.enqueue))
 		r.Post("/v1/conferences/{conferenceID}/end",
-			handler.HandleEndConference(s.db, s.log, s.emosTrigger))
+			handler.HandleEndConference(s.db, s.redis, s.log, s.emosTrigger))
 	})
 
 	// HMAC-authenticated server SDK routes.
@@ -95,7 +95,7 @@ func (s *Server) setupRoutes() {
 			}
 			r.Post("/v1/server/events", handler.HandleServerEvents(s.log, s.enqueue))
 			r.Post("/v1/server/conferences/{conferenceID}/end",
-				handler.HandleEndConference(s.db, s.log, s.emosTrigger))
+				handler.HandleEndConference(s.db, s.redis, s.log, s.emosTrigger))
 		})
 	} else {
 		s.log.Warn("SERVER_MASTER_KEY not configured — /v1/server/* endpoints disabled")

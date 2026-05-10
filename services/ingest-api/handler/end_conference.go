@@ -1,14 +1,17 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
 
 	"github.com/RTCMon/rtcmon/internal/auth"
@@ -41,8 +44,9 @@ func resolveAppID(r *http.Request) (int64, error) {
 //  3. Verifies app ownership (→ 403 on mismatch)
 //  4. Sets ended_at = now() idempotently (no-op if already ended)
 //  5. Fires the eMOS trigger asynchronously (non-blocking)
-//  6. Returns 202
-func HandleEndConference(pool *pgxpool.Pool, log *logrus.Logger, triggerEMOS EMOSTriggerFn) http.HandlerFunc {
+//  6. Invalidates analytics cache keys for the app (fire-and-forget)
+//  7. Returns 202
+func HandleEndConference(pool *pgxpool.Pool, rdb *redis.Client, log *logrus.Logger, triggerEMOS EMOSTriggerFn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		externalID := chi.URLParam(r, "conferenceID")
 
@@ -85,6 +89,20 @@ func HandleEndConference(pool *pgxpool.Pool, log *logrus.Logger, triggerEMOS EMO
 
 		if triggerEMOS != nil {
 			triggerEMOS(confDBID)
+		}
+
+		// Invalidate analytics overview cache for this app (fire-and-forget).
+		// The query-api stores keys as "overview:{appId}:{from}:{to}"; scanning
+		// the prefix invalidates all time-range variants at once.
+		if rdb != nil {
+			go func() {
+				ctx := context.Background()
+				pattern := fmt.Sprintf("overview:%d:*", confAppID)
+				iter := rdb.Scan(ctx, 0, pattern, 100).Iterator()
+				for iter.Next(ctx) {
+					rdb.Unlink(ctx, iter.Val())
+				}
+			}()
 		}
 
 		w.WriteHeader(http.StatusAccepted)

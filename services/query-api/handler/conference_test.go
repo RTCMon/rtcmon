@@ -124,6 +124,15 @@ func TestConferenceList_Unauthorized(t *testing.T) {
 	requireStatus(t, w, http.StatusUnauthorized)
 }
 
+func TestConferenceList_InvalidQuality(t *testing.T) {
+	sess := &session.Data{UserID: 1, OrgID: 1, Role: "admin"}
+	h := handler.HandleListConferences(nil, noopLog())
+	r := confRequest(1, "quality=excellent", sess)
+	w := httptest.NewRecorder()
+	h(w, r)
+	requireStatus(t, w, http.StatusBadRequest)
+}
+
 // ─── integration tests (require TEST_DB_URL) ─────────────────────────────────
 
 func TestConferenceList_Empty(t *testing.T) {

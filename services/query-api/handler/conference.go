@@ -60,25 +60,7 @@ func HandleListConferences(db *pgxpool.Pool, log *logrus.Logger) http.HandlerFun
 			return
 		}
 
-		// Verify the app belongs to the session user's org. Treats "not found"
-		// and "wrong org" identically (no enumeration).
-		var dummy int64
-		err = db.QueryRow(r.Context(),
-			`SELECT id FROM apps WHERE id = $1 AND org_id = $2`, appID, sess.OrgID,
-		).Scan(&dummy)
-		if err != nil {
-			if err == pgx.ErrNoRows {
-				writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
-				return
-			}
-			if log != nil {
-				log.WithError(err).Error("conference list: app ownership check")
-			}
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
-			return
-		}
-
-		// Parse and validate query params.
+		// Parse and validate query params before hitting the DB.
 		q := r.URL.Query()
 
 		page := parseIntParam(q.Get("page"), 1)
@@ -120,6 +102,24 @@ func HandleListConferences(db *pgxpool.Pool, log *logrus.Logger) http.HandlerFun
 				return
 			}
 			outcomeFilter = &outcome
+		}
+
+		// Verify the app belongs to the session user's org. Treats "not found"
+		// and "wrong org" identically (no enumeration).
+		var dummy int64
+		err = db.QueryRow(r.Context(),
+			`SELECT id FROM apps WHERE id = $1 AND org_id = $2`, appID, sess.OrgID,
+		).Scan(&dummy)
+		if err != nil {
+			if err == pgx.ErrNoRows {
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+				return
+			}
+			if log != nil {
+				log.WithError(err).Error("conference list: app ownership check")
+			}
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+			return
 		}
 
 		// Build the shared CTE + WHERE clause used by both count and data queries.

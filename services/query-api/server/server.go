@@ -81,6 +81,9 @@ func (s *Server) setupRoutes() {
 		// Connection stats time-series — BE-026.
 		r.Get("/v1/connections/{connectionId}/stats", handler.HandleGetConnectionStats(s.db, s.redis, s.log))
 
+		// Connection events — BE-027.
+		r.Get("/v1/connections/{connectionId}/events", handler.HandleGetConnectionEvents(s.db, s.log))
+
 		// Server API key management — BE-021.
 		r.Route("/v1/orgs/{orgId}/apps/{appId}", func(r chi.Router) {
 			r.Get("/server-key", handler.HandleGetServerKey(s.db, s.log))

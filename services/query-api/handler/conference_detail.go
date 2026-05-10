@@ -199,7 +199,10 @@ func HandleGetConference(db *pgxpool.Pool, log *logrus.Logger) http.HandlerFunc 
 					}
 					p := participantMap[pID]
 					p.Sessions = append(p.Sessions, newSD)
-					// Point to the slice element just appended.
+					// Safe to take a pointer here: the SQL ORDER BY s.id ASC guarantees
+					// all rows for this session arrive consecutively, so p.Sessions is
+					// never appended to again while sd is in use. If the ORDER BY ever
+					// changes, replace this with index-based access instead.
 					sd = &p.Sessions[len(p.Sessions)-1]
 					sessionMap[sID] = sd
 				}

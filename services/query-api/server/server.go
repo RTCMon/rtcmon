@@ -70,6 +70,10 @@ func (s *Server) setupRoutes() {
 	// Team invitations — unauthenticated accept endpoint.
 	s.router.Post("/v1/team/invitations/{token}/accept", handler.HandleAcceptInvitation(s.db, s.sessions, s.log))
 
+	// Share token view — public entry point that does its own session check and
+	// redirects to login when no session is present (BE-038).
+	s.router.Get("/share/{token}", handler.HandleGetShareToken(s.db, s.sessions, s.log))
+
 	// Session-required routes.
 	s.router.Group(func(r chi.Router) {
 		r.Use(s.sessionMiddleware())
@@ -111,6 +115,11 @@ func (s *Server) setupRoutes() {
 		r.Post("/v1/team/invitations", handler.HandleCreateInvitation(s.db, s.log))
 		r.Get("/v1/team/invitations", handler.HandleListInvitations(s.db, s.log))
 		r.Delete("/v1/team/invitations/{token}", handler.HandleRevokeInvitation(s.db, s.log))
+
+		// Share token management — BE-038.
+		r.Post("/v1/conferences/{id}/share", handler.HandleCreateShareToken(s.db, s.log))
+		r.Delete("/v1/share-tokens/{token}", handler.HandleRevokeShareToken(s.db, s.log))
+		r.Get("/v1/share-tokens", handler.HandleListShareTokens(s.db, s.log))
 	})
 }
 

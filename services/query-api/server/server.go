@@ -81,6 +81,15 @@ func (s *Server) setupRoutes() {
 		r.Get("/auth/me", handler.HandleMe())
 		r.Patch("/auth/me", handler.HandlePatchMe(s.db, s.sessions, s.log))
 
+		// App & API key management — BE-034.
+		r.Post("/v1/orgs", handler.HandleCreateOrg(s.db, s.sessions, s.log))
+		r.Route("/v1/orgs/{orgId}", func(r chi.Router) {
+			r.Get("/apps", handler.HandleListApps(s.db, s.log))
+			r.Post("/apps", handler.HandleCreateApp(s.db, s.log))
+			r.Delete("/apps/{appId}", handler.HandleDeleteApp(s.db, s.log))
+			r.Post("/apps/{appId}/rotate-key", handler.HandleRotateKey(s.db, s.log))
+		})
+
 		// Conference endpoints — BE-024/BE-025.
 		r.Get("/v1/apps/{appId}/conferences", handler.HandleListConferences(s.db, s.log))
 		r.Get("/v1/conferences/{conferenceId}", handler.HandleGetConference(s.db, s.log))

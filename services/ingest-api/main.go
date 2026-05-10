@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/RTCMon/rtcmon/internal/cache"
 	"github.com/RTCMon/rtcmon/internal/config"
 	"github.com/RTCMon/rtcmon/internal/db"
+	"github.com/RTCMon/rtcmon/internal/emos"
 	"github.com/RTCMon/rtcmon/internal/ingest"
 	"github.com/RTCMon/rtcmon/internal/logger"
 	"github.com/RTCMon/rtcmon/internal/migrate"
@@ -86,12 +88,25 @@ func newServeCmd() *cobra.Command {
 			)
 			// wp.Shutdown() is called inside serveWithShutdown after signal.
 
+			// Read configurable high-loss coefficient (RFC §3.7, K value).
+			lossCoeff := emos.DefaultLossCoeff
+			if v := os.Getenv("EMOS_LOSS_COEFF"); v != "" {
+				if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0 {
+					lossCoeff = f
+				} else {
+					log.WithField("EMOS_LOSS_COEFF", v).Warn("invalid EMOS_LOSS_COEFF, using default")
+				}
+			}
+
 			// Create eMOS trigger: non-blocking send to a buffered channel.
-			// The goroutine body is a stub; real eMOS computation is BE-017+.
+			// The goroutine processes conferences sequentially; close(emosCh) in
+			// serveWithShutdown lets it drain and exit cleanly.
 			emosCh := make(chan int64, 256)
 			go func() {
 				for confID := range emosCh {
-					log.WithField("conference_id", confID).Info("eMOS computation triggered (stub)")
+					if err := emos.RunJob(context.Background(), pool, confID, lossCoeff, log); err != nil {
+						log.WithError(err).WithField("conference_id", confID).Error("eMOS job failed")
+					}
 				}
 			}()
 			emosTrigger := func(confID int64) {

@@ -90,6 +90,9 @@ func (s *Server) setupRoutes() {
 		// Analytics overview — BE-031.
 		r.Get("/v1/apps/{appId}/analytics/overview", handler.HandleGetAnalyticsOverview(s.db, s.redis, s.log))
 
+		// Analytics breakdown — BE-032.
+		r.Get("/v1/apps/{appId}/analytics/breakdown", handler.HandleGetAnalyticsBreakdown(s.db, s.redis, s.log))
+
 		// Server API key management — BE-021.
 		r.Route("/v1/orgs/{orgId}/apps/{appId}", func(r chi.Router) {
 			r.Get("/server-key", handler.HandleGetServerKey(s.db, s.log))

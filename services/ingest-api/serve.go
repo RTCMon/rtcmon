@@ -10,6 +10,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	"github.com/RTCMon/rtcmon/internal/retention"
 	"github.com/RTCMon/rtcmon/internal/stale"
 	"github.com/RTCMon/rtcmon/internal/worker"
 )
@@ -19,17 +20,20 @@ import (
 //  1. Drains in-flight HTTP requests (httpShutdownTimeout, typically 30s)
 //  2. Calls wp.Shutdown() to flush all buffered worker batches to DB
 //  3. Calls staleJob.Shutdown() to stop the stale-conference background job
-//  4. Closes emosCh to stop the eMOS goroutine cleanly
+//  4. Calls retentionJob.Shutdown() to stop the data-retention cleanup job
+//  5. Closes emosCh to stop the eMOS goroutine cleanly
 //
 // Returns nil on clean shutdown, non-nil on unexpected server startup error.
 //
 // Shutdown order is intentional: HTTP stops accepting new enqueues first, then
 // the worker pool flushes everything already buffered, then the stale job stops
-// (so its last eMOS triggers can still be queued), then eMOS exits.
+// (so its last eMOS triggers can still be queued), then the retention job stops,
+// then eMOS exits.
 func serveWithShutdown(
 	httpSrv *http.Server,
 	wp *worker.Pool,
 	staleJob *stale.Job,
+	retentionJob *retention.Job,
 	emosCh chan int64,
 	sigCh <-chan os.Signal,
 	httpShutdownTimeout time.Duration,
@@ -68,7 +72,10 @@ func serveWithShutdown(
 	// closed so any in-flight eMOS triggers can still be queued.
 	staleJob.Shutdown()
 
-	// Step 4: stop the eMOS goroutine.
+	// Step 4: stop the data-retention cleanup job.
+	retentionJob.Shutdown()
+
+	// Step 5: stop the eMOS goroutine.
 	close(emosCh)
 
 	log.Info("ingest-api: shutdown complete")

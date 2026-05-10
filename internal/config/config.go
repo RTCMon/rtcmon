@@ -18,6 +18,7 @@ type Config struct {
 	RateLimit       RateLimitConfig
 	ServerRateLimit RateLimitConfig `mapstructure:"server_rate_limit"`
 	Worker          WorkerConfig
+	Retention       RetentionConfig
 	Log             LogConfig
 }
 
@@ -58,6 +59,10 @@ type WorkerConfig struct {
 
 type SessionConfig struct {
 	TTLSeconds int `mapstructure:"ttl_seconds"`
+}
+
+type RetentionConfig struct {
+	Cron string `mapstructure:"cron"`
 }
 
 type LogConfig struct {
@@ -127,6 +132,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("worker.dead_letter_dir", "./dead_letter/")
 
 	v.SetDefault("session.ttl_seconds", 28800) // 8 hours
+
+	v.SetDefault("retention.cron", "0 2 * * *")
 
 	v.SetDefault("log.level", "info")
 }

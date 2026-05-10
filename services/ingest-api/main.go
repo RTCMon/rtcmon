@@ -21,6 +21,7 @@ import (
 	"github.com/RTCMon/rtcmon/internal/logger"
 	"github.com/RTCMon/rtcmon/internal/migrate"
 	"github.com/RTCMon/rtcmon/internal/ratelimit"
+	"github.com/RTCMon/rtcmon/internal/retention"
 	"github.com/RTCMon/rtcmon/internal/stale"
 	"github.com/RTCMon/rtcmon/internal/worker"
 	"github.com/RTCMon/rtcmon/services/ingest-api/server"
@@ -138,6 +139,14 @@ func newServeCmd() *cobra.Command {
 			staleJob := stale.New(pool, log, checkInterval, idleThreshold, lossCoeff, emosTrigger)
 			staleJob.Start()
 
+			// Data-retention cleanup job — configurable cron schedule.
+			retentionCron := cfg.Retention.Cron
+			if v := os.Getenv("RETENTION_JOB_CRON"); v != "" {
+				retentionCron = v
+			}
+			retentionJob := retention.New(pool, log, retentionCron)
+			retentionJob.Start()
+
 			// Wire signal handling and HTTP server.
 			rl := ratelimit.New(client, ratelimit.Config{
 				Max:        cfg.RateLimit.Max,
@@ -164,7 +173,7 @@ func newServeCmd() *cobra.Command {
 				Addr:    fmt.Sprintf(":%d", cfg.Server.Port),
 				Handler: srv,
 			}
-			return serveWithShutdown(httpSrv, wp, staleJob, emosCh, sigCh, 30*time.Second, log)
+			return serveWithShutdown(httpSrv, wp, staleJob, retentionJob, emosCh, sigCh, 30*time.Second, log)
 		},
 	}
 }

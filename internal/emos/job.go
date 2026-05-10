@@ -11,6 +11,10 @@ import (
 // connection_stats row and writes the result to session_quality. Sessions with
 // no stats are silently skipped. The upsert makes the job idempotent.
 //
+// After eMOS computation, RunJob also runs the observations engine on all
+// connections to detect quality issues. Observation errors are logged but do
+// not block the job.
+//
 // lossCoeff is the high-loss impairment coefficient K from RFC §3.7; pass
 // DefaultLossCoeff unless per-deployment tuning is required.
 func RunJob(ctx context.Context, db *pgxpool.Pool, conferenceID int64, lossCoeff float64, log *logrus.Logger) error {
@@ -67,6 +71,55 @@ func RunJob(ctx context.Context, db *pgxpool.Pool, conferenceID int64, lossCoeff
 				"emos":          emos,
 				"outcome":       outcome,
 			}).Info("emos job: session_quality written")
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	// After eMOS computation, run observations engine on all connections.
+	if err := runObservations(ctx, db, conferenceID, log); err != nil && log != nil {
+		// Log but don't block job on observation errors.
+		log.WithError(err).WithField("conference_id", conferenceID).Warn("emos job: observations evaluation failed")
+	}
+
+	return nil
+}
+
+// runObservations evaluates all connections in a conference for quality issues.
+func runObservations(ctx context.Context, db *pgxpool.Pool, conferenceID int64, log *logrus.Logger) error {
+	// Query all connections with their app_id.
+	rows, err := db.Query(ctx, `
+		SELECT DISTINCT conn.id, conf.app_id
+		FROM connections conn
+		JOIN sessions s              ON s.id              = conn.session_id
+		JOIN participants p          ON p.id              = s.participant_id
+		JOIN conferences conf        ON conf.id           = p.conference_id
+		WHERE p.conference_id = $1
+	`, conferenceID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	obsEngine := NewObservationEngine(db)
+	for rows.Next() {
+		var connectionID, appID int64
+		if err := rows.Scan(&connectionID, &appID); err != nil {
+			if log != nil {
+				log.WithError(err).Error("emos job: scan connection")
+			}
+			continue
+		}
+
+		if err := obsEngine.EvaluateConnection(ctx, connectionID, appID); err != nil {
+			if log != nil {
+				log.WithError(err).WithFields(logrus.Fields{
+					"connection_id": connectionID,
+					"app_id":        appID,
+				}).Warn("emos job: evaluate connection observations")
+			}
+			continue
 		}
 	}
 	return rows.Err()

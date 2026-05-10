@@ -21,6 +21,7 @@ import (
 	"github.com/RTCMon/rtcmon/internal/logger"
 	"github.com/RTCMon/rtcmon/internal/migrate"
 	"github.com/RTCMon/rtcmon/internal/ratelimit"
+	"github.com/RTCMon/rtcmon/internal/stale"
 	"github.com/RTCMon/rtcmon/internal/worker"
 	"github.com/RTCMon/rtcmon/services/ingest-api/server"
 )
@@ -117,6 +118,26 @@ func newServeCmd() *cobra.Command {
 				}
 			}
 
+			// Stale-conference cleanup job — configurable interval and idle threshold.
+			checkInterval := 5 * time.Minute
+			if v := os.Getenv("STALE_CONF_CHECK_INTERVAL"); v != "" {
+				if d, err := time.ParseDuration(v); err == nil && d > 0 {
+					checkInterval = d
+				} else {
+					log.WithField("STALE_CONF_CHECK_INTERVAL", v).Warn("invalid STALE_CONF_CHECK_INTERVAL, using default 5m")
+				}
+			}
+			idleThreshold := 15 * time.Minute
+			if v := os.Getenv("STALE_CONF_IDLE_THRESHOLD"); v != "" {
+				if d, err := time.ParseDuration(v); err == nil && d > 0 {
+					idleThreshold = d
+				} else {
+					log.WithField("STALE_CONF_IDLE_THRESHOLD", v).Warn("invalid STALE_CONF_IDLE_THRESHOLD, using default 15m")
+				}
+			}
+			staleJob := stale.New(pool, log, checkInterval, idleThreshold, lossCoeff, emosTrigger)
+			staleJob.Start()
+
 			// Wire signal handling and HTTP server.
 			rl := ratelimit.New(client, ratelimit.Config{
 				Max:        cfg.RateLimit.Max,
@@ -143,7 +164,7 @@ func newServeCmd() *cobra.Command {
 				Addr:    fmt.Sprintf(":%d", cfg.Server.Port),
 				Handler: srv,
 			}
-			return serveWithShutdown(httpSrv, wp, emosCh, sigCh, 30*time.Second, log)
+			return serveWithShutdown(httpSrv, wp, staleJob, emosCh, sigCh, 30*time.Second, log)
 		},
 	}
 }

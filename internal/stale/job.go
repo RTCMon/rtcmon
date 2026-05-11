@@ -60,7 +60,9 @@ func (j *Job) Start() {
 			select {
 			case <-ticker.C:
 				if err := RunOnce(context.Background(), j.db, j.idleThreshold, j.lossCoeff, j.triggerEMOS, j.log); err != nil {
-					j.log.WithError(err).Error("stale job: scan failed")
+					if j.log != nil {
+						j.log.WithError(err).Error("stale job: scan failed")
+					}
 				}
 			case <-j.done:
 				return

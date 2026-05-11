@@ -565,14 +565,20 @@ func HandleAcceptInvitation(
 			return
 		}
 
-		// Create user (if not already exists)
+		// Create user if not already exists; never overwrite credentials of an existing account.
 		var userID int64
 		err = tx.QueryRow(r.Context(), `
 			INSERT INTO users (email, name, password_hash)
 			VALUES ($1, $2, $3)
-			ON CONFLICT (email) DO UPDATE SET name = $2, password_hash = $3
+			ON CONFLICT (email) DO NOTHING
 			RETURNING id
 		`, email, req.Name, string(hash)).Scan(&userID)
+		if err == pgx.ErrNoRows {
+			// User already exists — look up their id without changing their credentials.
+			err = tx.QueryRow(r.Context(), `
+				SELECT id FROM users WHERE email = $1
+			`, email).Scan(&userID)
+		}
 		if err != nil {
 			log.WithError(err).Error("accept invitation: insert user")
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})

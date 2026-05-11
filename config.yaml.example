@@ -1,0 +1,41 @@
+server:
+  port: 8080
+  metrics_port: 9090
+
+db:
+  url: "postgres://postgres:postgres@postgres:5432/rtcmon"
+  max_conns: 20
+  min_conns: 5
+  conn_lifetime: "30m"
+
+redis:
+  url: "redis://redis:6379/0"
+  pool_size: 10
+
+auth:
+  jwt_secret: "your-jwt-secret-here"
+  server_master_key: "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+
+rate_limit:
+  max: 100
+  window_secs: 60
+
+server_rate_limit:
+  max: 1000
+  window_secs: 60
+
+session:
+  ttl_seconds: 28800
+
+worker:
+  count: 4
+  batch_size: 500
+  flush_interval_ms: 100
+  channel_cap: 8000
+  dead_letter_dir: "./dead_letter/"
+
+retention:
+  cron: "0 2 * * *"
+
+log:
+  level: "info"

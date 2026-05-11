@@ -1,4 +1,4 @@
-.PHONY: build build-api clean lint test test-short tidy migrate-up migrate-down migrate-create
+.PHONY: build build-api clean lint test test-short tidy swagger migrate-up migrate-down migrate-create
 
 build:
 	go build ./...
@@ -21,6 +21,10 @@ test-short:
 
 tidy:
 	go mod tidy
+
+swagger:
+	swag init --dir ./services/query-api -g main.go -o services/query-api/docs
+	swag init --dir ./services/ingest-api -g main.go -o services/ingest-api/docs
 
 migrate-up:
 	go run ./services/ingest-api migrate up

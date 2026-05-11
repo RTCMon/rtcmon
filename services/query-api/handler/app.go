@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -313,13 +312,13 @@ func HandleDeleteApp(db *pgxpool.Pool, log *logrus.Logger) http.HandlerFunc {
 			return
 		}
 
-		w.WriteHeader(http.StatusAccepted)
+		if _, err := db.Exec(r.Context(), `DELETE FROM apps WHERE id = $1`, appID); err != nil {
+			log.WithError(err).WithField("app_id", appID).Error("HandleDeleteApp: delete app")
+			http.Error(w, "internal service error", http.StatusInternalServerError)
+			return
+		}
 
-		go func(pool *pgxpool.Pool, id int64) {
-			if _, err := pool.Exec(context.Background(), `DELETE FROM apps WHERE id = $1`, id); err != nil {
-				log.WithError(err).WithField("app_id", id).Error("HandleDeleteApp: background delete failed")
-			}
-		}(db, appID)
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
 

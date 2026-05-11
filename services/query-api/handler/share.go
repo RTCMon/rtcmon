@@ -160,27 +160,7 @@ func HandleGetShareToken(db *pgxpool.Pool, sessions *session.Store, log *logrus.
 			return
 		}
 
-		// Increment view_count atomically
-		_, err = db.Exec(r.Context(), `
-			UPDATE share_tokens SET view_count = view_count + 1
-			WHERE token = $1
-		`, token)
-		if err != nil {
-			log.WithError(err).Error("get share token: increment view_count")
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
-			return
-		}
-
-		// Fetch conference detail (using existing helper) by delegating to HandleGetConference logic
-		// Create a context with the conference ID in the chi params
-		cCtx := context.WithValue(r.Context(), chi.RouteCtxKey, chi.NewRouteContext())
-		chi.RouteContext(cCtx).URLParams.Add("conferenceId", strconv.FormatInt(conferenceID, 10))
-		fakeReq := r.WithContext(cCtx)
-
-		// Since HandleGetConference expects session in context, we'll copy that
-		fakeReq = fakeReq.WithContext(session.WithContext(cCtx, sess))
-
-		// We can't easily reuse HandleGetConference handler, so we'll fetch the detail here directly
+		// Fetch conference detail first; only increment view_count on success.
 		detail, err := fetchConferenceDetail(r.Context(), db, conferenceID, sess.OrgID)
 		if err == pgx.ErrNoRows {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "conference not found"})
@@ -188,6 +168,17 @@ func HandleGetShareToken(db *pgxpool.Pool, sessions *session.Store, log *logrus.
 		}
 		if err != nil {
 			log.WithError(err).Error("get share token: fetch conference detail")
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+			return
+		}
+
+		// Increment view_count only after successful retrieval.
+		_, err = db.Exec(r.Context(), `
+			UPDATE share_tokens SET view_count = view_count + 1
+			WHERE token = $1
+		`, token)
+		if err != nil {
+			log.WithError(err).Error("get share token: increment view_count")
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 			return
 		}

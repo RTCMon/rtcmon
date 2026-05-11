@@ -23,6 +23,7 @@ type Job struct {
 	triggerEMOS   func(int64)
 
 	once    sync.Once
+	started bool
 	done    chan struct{}
 	stopped chan struct{}
 }
@@ -50,6 +51,7 @@ func New(
 
 // Start launches the background goroutine. Call only once.
 func (j *Job) Start() {
+	j.started = true
 	go func() {
 		defer close(j.stopped)
 
@@ -72,10 +74,12 @@ func (j *Job) Start() {
 }
 
 // Shutdown signals the goroutine to stop and waits for it to exit.
-// Safe to call multiple times.
+// Safe to call multiple times. No-op if Start was never called.
 func (j *Job) Shutdown() {
 	j.once.Do(func() { close(j.done) })
-	<-j.stopped
+	if j.started {
+		<-j.stopped
+	}
 }
 
 // RunOnce performs a single scan: finds stale conferences, sets ended_at, and

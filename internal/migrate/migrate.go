@@ -23,7 +23,16 @@ func newMigrator(dbURL string) (*migrate.Migrate, error) {
 		return nil, fmt.Errorf("migrate: load source: %w", err)
 	}
 
-	m, err := migrate.NewWithSourceInstance("iofs", src, dbURL)
+	// Normalize scheme for golang-migrate pgx/v5: it expects pgx5:// prefix
+	// when utilizing the modern pgx/v5 driver registration.
+	migURL := dbURL
+	if len(dbURL) > 11 && dbURL[:11] == "postgres://" {
+		migURL = "pgx5://" + dbURL[11:]
+	} else if len(dbURL) > 13 && dbURL[:13] == "postgresql://" {
+		migURL = "pgx5://" + dbURL[13:]
+	}
+
+	m, err := migrate.NewWithSourceInstance("iofs", src, migURL)
 	if err != nil {
 		return nil, fmt.Errorf("migrate: connect: %w", err)
 	}

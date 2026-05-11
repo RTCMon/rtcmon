@@ -23,6 +23,14 @@ func TestEMOS_HighLoss(t *testing.T) {
 	}
 }
 
+func TestEMOS_RFCSpec_HighLossHighRTT(t *testing.T) {
+	// RFC §3.7: (10% loss, 100ms RTT) → eMOS ≈ 2.2 (±0.1)
+	emos, _ := ComputeEMOS(0.10, 100, DefaultLossCoeff)
+	if math.Abs(float64(emos)-2.2) > 0.1 {
+		t.Errorf("RFC (10%%, 100ms): want ~2.2, got %v", emos)
+	}
+}
+
 func TestEMOS_VeryHighLoss(t *testing.T) {
 	// (30% loss, 300ms RTT): R goes negative → clamped to 0 → eMOS = 1.0.
 	emos, outcome := ComputeEMOS(0.30, 300, DefaultLossCoeff)

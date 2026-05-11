@@ -1,52 +1,24 @@
+//go:build integration
+
 package retention_test
 
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/RTCMon/rtcmon/internal/retention"
+	"github.com/RTCMon/rtcmon/internal/testutil"
 )
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 func testPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	url := os.Getenv("TEST_DB_URL")
-	if url == "" {
-		t.Skip("TEST_DB_URL not set; skipping integration test")
-	}
-	pool, err := pgxpool.New(context.Background(), url)
-	if err != nil {
-		t.Fatalf("pgxpool.New: %v", err)
-	}
-	t.Cleanup(pool.Close)
-	applyMigrations(t, pool)
-	return pool
-}
-
-func applyMigrations(t *testing.T, pool *pgxpool.Pool) {
-	t.Helper()
-	files := []string{
-		"../../migrations/000001_initial_schema.up.sql",
-		"../../migrations/000002_add_external_id.up.sql",
-		"../../migrations/000003_server_api_key.up.sql",
-		"../../migrations/000004_connection_stats_source.up.sql",
-	}
-	for _, f := range files {
-		data, err := os.ReadFile(filepath.Clean(f))
-		if err != nil {
-			t.Fatalf("read migration %s: %v", f, err)
-		}
-		if _, err := pool.Exec(context.Background(), string(data)); err != nil {
-			t.Logf("migration %s: %v (may be harmless on re-run)", f, err)
-		}
-	}
+	return testutil.StartPostgres(t)
 }
 
 // setupApp creates org → app with the given retention_days and registers cleanup.

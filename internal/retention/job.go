@@ -27,6 +27,7 @@ type Job struct {
 	once    sync.Once
 	done    chan struct{}
 	stopped chan struct{}
+	cancel  context.CancelFunc
 }
 
 // New creates a Job. Start must be called separately.
@@ -37,6 +38,7 @@ func New(db *pgxpool.Pool, log *logrus.Logger, cronStr string) *Job {
 		cronStr: cronStr,
 		done:    make(chan struct{}),
 		stopped: make(chan struct{}),
+		cancel:  func() {},
 	}
 }
 
@@ -49,6 +51,9 @@ func (j *Job) Start() {
 		return
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	j.cancel = cancel
+
 	go func() {
 		defer close(j.stopped)
 		for {
@@ -56,7 +61,7 @@ func (j *Job) Start() {
 			timer := time.NewTimer(time.Until(next))
 			select {
 			case <-timer.C:
-				if err := RunOnce(context.Background(), j.db, j.log); err != nil {
+				if err := RunOnce(ctx, j.db, j.log); err != nil {
 					j.log.WithError(err).Error("retention: job run failed")
 				}
 			case <-j.done:
@@ -70,7 +75,10 @@ func (j *Job) Start() {
 // Shutdown signals the goroutine to stop and waits for it to exit.
 // Safe to call multiple times.
 func (j *Job) Shutdown() {
-	j.once.Do(func() { close(j.done) })
+	j.once.Do(func() {
+		j.cancel()
+		close(j.done)
+	})
 	<-j.stopped
 }
 

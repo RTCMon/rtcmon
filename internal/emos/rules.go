@@ -4,6 +4,15 @@ import (
 	"fmt"
 )
 
+func floatThreshold(thresholds map[string]interface{}, key string, fallback float64) float64 {
+	if v, ok := thresholds[key]; ok {
+		if f, ok := v.(float64); ok {
+			return f
+		}
+	}
+	return fallback
+}
+
 // DefaultRules returns the 9 built-in observation rules.
 func DefaultRules() []ObservationRule {
 	return []ObservationRule{
@@ -21,8 +30,8 @@ func DefaultRules() []ObservationRule {
 
 // evaluatePacketLossSustained detects sustained packet loss (3+ consecutive samples).
 func evaluatePacketLossSustained(samples []StatRow, thresholds map[string]interface{}) []Observation {
-	threshold := thresholds["packet_loss_sustained.threshold"].(float64)
-	minSamples := int(thresholds["packet_loss_sustained.min_samples"].(float64))
+	threshold := floatThreshold(thresholds, "packet_loss_sustained.threshold", 0.05)
+	minSamples := int(floatThreshold(thresholds, "packet_loss_sustained.min_samples", 3))
 
 	var observations []Observation
 	var consecutive struct {
@@ -78,7 +87,7 @@ func evaluatePacketLossSustained(samples []StatRow, thresholds map[string]interf
 
 // evaluatePacketLossSpike detects single sample of high packet loss.
 func evaluatePacketLossSpike(samples []StatRow, thresholds map[string]interface{}) []Observation {
-	threshold := thresholds["packet_loss_spike.threshold"].(float64)
+	threshold := floatThreshold(thresholds, "packet_loss_spike.threshold", 0.15)
 
 	var observations []Observation
 	for _, sample := range samples {
@@ -101,8 +110,8 @@ func evaluatePacketLossSpike(samples []StatRow, thresholds map[string]interface{
 
 // evaluateRTTHigh detects sustained high RTT (2+ consecutive samples).
 func evaluateRTTHigh(samples []StatRow, thresholds map[string]interface{}) []Observation {
-	threshold := int32(thresholds["rtt_high.threshold"].(float64))
-	minSamples := int(thresholds["rtt_high.min_samples"].(float64))
+	threshold := int32(floatThreshold(thresholds, "rtt_high.threshold", 300))
+	minSamples := int(floatThreshold(thresholds, "rtt_high.min_samples", 2))
 
 	var observations []Observation
 	var consecutive struct {
@@ -156,7 +165,7 @@ func evaluateRTTHigh(samples []StatRow, thresholds map[string]interface{}) []Obs
 
 // evaluateRTTSpike detects large RTT increase between consecutive samples.
 func evaluateRTTSpike(samples []StatRow, thresholds map[string]interface{}) []Observation {
-	delta := int32(thresholds["rtt_spike_delta.threshold"].(float64))
+	delta := int32(floatThreshold(thresholds, "rtt_spike_delta.threshold", 100))
 
 	var observations []Observation
 	for i := 1; i < len(samples); i++ {
@@ -183,8 +192,8 @@ func evaluateRTTSpike(samples []StatRow, thresholds map[string]interface{}) []Ob
 
 // evaluateJitterHigh detects sustained high jitter (3+ consecutive samples).
 func evaluateJitterHigh(samples []StatRow, thresholds map[string]interface{}) []Observation {
-	threshold := int32(thresholds["jitter_high.threshold"].(float64))
-	minSamples := int(thresholds["jitter_high.min_samples"].(float64))
+	threshold := int32(floatThreshold(thresholds, "jitter_high.threshold", 50))
+	minSamples := int(floatThreshold(thresholds, "jitter_high.min_samples", 3))
 
 	var observations []Observation
 	var consecutive struct {
@@ -287,8 +296,8 @@ func evaluateVideoFreezeRepeated(samples []StatRow, thresholds map[string]interf
 
 // evaluateAudioConcealmentHigh detects sustained high audio concealment.
 func evaluateAudioConcealmentHigh(samples []StatRow, thresholds map[string]interface{}) []Observation {
-	threshold := thresholds["audio_concealment_high.threshold"].(float64)
-	minSamples := int(thresholds["audio_concealment_high.min_samples"].(float64))
+	threshold := floatThreshold(thresholds, "audio_concealment_high.threshold", 0.10)
+	minSamples := int(floatThreshold(thresholds, "audio_concealment_high.min_samples", 3))
 
 	var observations []Observation
 	var consecutive struct {
@@ -344,7 +353,7 @@ func evaluateAudioConcealmentHigh(samples []StatRow, thresholds map[string]inter
 
 // evaluateBitrateCollapse detects large outbound bitrate drops.
 func evaluateBitrateCollapse(samples []StatRow, thresholds map[string]interface{}) []Observation {
-	ratio := thresholds["bitrate_collapse_ratio.threshold"].(float64)
+	ratio := floatThreshold(thresholds, "bitrate_collapse_ratio.threshold", 0.50)
 
 	var observations []Observation
 	for i := 1; i < len(samples); i++ {

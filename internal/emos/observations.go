@@ -255,10 +255,10 @@ func (e *ObservationEngine) insertObservationIfNew(ctx context.Context, connecti
 			WHERE connection_id = $1
 				AND event_type = 'observation'
 				AND payload->>'rule_name' = $2
-				AND payload->>'start_ts' = $3
-				AND payload->>'end_ts' = $4
+				AND (payload->>'start_ts')::timestamptz = $3
+				AND (payload->>'end_ts')::timestamptz = $4
 		)
-	`, connectionID, obs.RuleName, obs.StartTS.Format(time.RFC3339), obs.EndTS.Format(time.RFC3339)).Scan(&exists)
+	`, connectionID, obs.RuleName, obs.StartTS, obs.EndTS).Scan(&exists)
 	if err != nil {
 		return fmt.Errorf("emos: check duplicate: %w", err)
 	}

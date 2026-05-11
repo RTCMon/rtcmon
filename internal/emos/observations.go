@@ -59,10 +59,10 @@ func NewObservationEngine(db *pgxpool.Pool) *ObservationEngine {
 			"jitter_high.threshold":              float64(50),
 			"audio_concealment_high.threshold":   0.10,
 			"bitrate_collapse_ratio.threshold":   0.50,
-			"packet_loss_sustained.min_samples":  3,
-			"rtt_high.min_samples":               2,
-			"jitter_high.min_samples":            3,
-			"audio_concealment_high.min_samples": 3,
+			"packet_loss_sustained.min_samples":  float64(3),
+			"rtt_high.min_samples":               float64(2),
+			"jitter_high.min_samples":            float64(3),
+			"audio_concealment_high.min_samples": float64(3),
 		},
 	}
 }

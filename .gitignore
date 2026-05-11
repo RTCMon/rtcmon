@@ -1,4 +1,7 @@
 .claude
+.kilo
 bin
 docs
 plans
+config.yaml
+coverage.out

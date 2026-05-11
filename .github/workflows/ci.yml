@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # Step 1: vet
+      - name: go vet
+        run: go vet ./...
+
+      # Step 2: lint
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+
+      # Step 3: unit tests (no external deps required)
+      - name: Unit tests
+        run: make test-unit
+
+      # Step 4: integration tests (Docker is available on ubuntu-latest)
+      - name: Integration tests
+        run: make test-integration
+
+      # Step 5: Docker build validation
+      - name: Build ingest-api image
+        run: docker build -f services/ingest-api/Dockerfile -t ingest-api:ci .
+
+      - name: Build query-api image
+        run: docker build -f services/query-api/Dockerfile -t query-api:ci .

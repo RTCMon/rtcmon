@@ -95,8 +95,8 @@ func RunOnce(
 	// Find all conferences that have no ended_at and no connection_stats row
 	// newer than idleThreshold. Conferences that never sent any stats are
 	// also returned (NOT EXISTS is vacuously true with no rows).
-	// Pass idleThreshold as time.Duration; pgx v5 encodes it as a Postgres
-	// interval natively, so no string formatting or ::interval cast is needed.
+	// The ::interval cast is required: without it Postgres cannot resolve the
+	// operator when the parameter type is not inferred from context.
 	rows, err := db.Query(ctx, `
 		SELECT c.id
 		FROM conferences c
@@ -108,7 +108,7 @@ func RunOnce(
 		      JOIN connections conn ON conn.session_id   = s.id
 		      JOIN connection_stats cs ON cs.connection_id = conn.id
 		      WHERE p.conference_id = c.id
-		        AND cs.ts > now() - $1
+		        AND cs.ts > now() - $1::interval
 		  )
 	`, idleThreshold)
 	if err != nil {

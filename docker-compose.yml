@@ -26,28 +26,57 @@ services:
       timeout: 5s
       retries: 5
 
+  migrator:
+    build:
+      context: .
+      dockerfile: services/ingest-api/Dockerfile
+    entrypoint: ["/bin/ingest-api", "migrate", "up"]
+    environment:
+      DB_URL: postgres://postgres:postgres@postgres:5432/rtcmon
+    volumes:
+      - ./config.yaml:/config.yaml
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   ingest-api:
     build:
       context: .
       dockerfile: services/ingest-api/Dockerfile
-    environment:
-      DB_URL: postgres://postgres:postgres@postgres:5432/rtcmon
-      REDIS_URL: redis://redis:6379/0
-      SERVER_PORT: 8080
-      LOG_LEVEL: info
-      WORKER_COUNT: 4
-      WORKER_BATCH_SIZE: 500
-      WORKER_FLUSH_INTERVAL_MS: 100
-      WORKER_CHANNEL_CAP: 8000
+    volumes:
+      - ./config.yaml:/config.yaml
     ports:
       - "8080:8080"
     depends_on:
+      migrator:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  query-api:
+    build:
+      context: .
+      dockerfile: services/query-api/Dockerfile
+    volumes:
+      - ./config.yaml:/config.yaml
+    ports:
+      - "8081:8081"
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
       interval: 10s
       timeout: 5s
       retries: 5

@@ -102,16 +102,20 @@ func HandleEndConference(pool *pgxpool.Pool, rdb *redis.Client, log *logrus.Logg
 			triggerEMOS(confDBID)
 		}
 
-		// Invalidate analytics overview cache for this app (fire-and-forget).
-		// The query-api stores keys as "overview:{appId}:{from}:{to}"; scanning
-		// the prefix invalidates all time-range variants at once.
+		// Invalidate analytics cache for this app (fire-and-forget).
+		// The query-api stores keys as "overview:{appId}:*" and "breakdown:{appId}:*";
+		// scanning both prefixes invalidates all time-range variants at once.
 		if rdb != nil {
 			go func() {
 				ctx := context.Background()
-				pattern := fmt.Sprintf("overview:%d:*", confAppID)
-				iter := rdb.Scan(ctx, 0, pattern, 100).Iterator()
-				for iter.Next(ctx) {
-					rdb.Unlink(ctx, iter.Val())
+				for _, pattern := range []string{
+					fmt.Sprintf("overview:%d:*", confAppID),
+					fmt.Sprintf("breakdown:%d:*", confAppID),
+				} {
+					iter := rdb.Scan(ctx, 0, pattern, 100).Iterator()
+					for iter.Next(ctx) {
+						rdb.Unlink(ctx, iter.Val())
+					}
 				}
 			}()
 		}

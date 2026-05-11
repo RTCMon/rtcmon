@@ -102,7 +102,7 @@ func runObservations(ctx context.Context, db *pgxpool.Pool, conferenceID int64, 
 	}
 	defer rows.Close()
 
-	obsEngine := NewObservationEngine(db)
+	obsEngine := NewObservationEngine(db, log)
 	for rows.Next() {
 		var connectionID, appID int64
 		if err := rows.Scan(&connectionID, &appID); err != nil {

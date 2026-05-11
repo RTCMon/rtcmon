@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/sirupsen/logrus"
 
 	"github.com/RTCMon/rtcmon/internal/metrics"
 )
@@ -43,14 +44,16 @@ type ObservationRule struct {
 type ObservationEngine struct {
 	rules    []ObservationRule
 	db       *pgxpool.Pool
+	log      *logrus.Logger
 	defaults map[string]interface{} // default thresholds
 }
 
 // NewObservationEngine creates a new observations engine with default rules.
-func NewObservationEngine(db *pgxpool.Pool) *ObservationEngine {
+func NewObservationEngine(db *pgxpool.Pool, log *logrus.Logger) *ObservationEngine {
 	return &ObservationEngine{
 		rules: DefaultRules(),
 		db:    db,
+		log:   log,
 		defaults: map[string]interface{}{
 			"packet_loss_sustained.threshold":    0.05,
 			"packet_loss_spike.threshold":        0.15,
@@ -95,7 +98,9 @@ func (e *ObservationEngine) EvaluateConnection(
 			// Special handling: fetch from events.
 			obs, err := e.evaluateICEFailure(ctx, connectionID, thresholds)
 			if err != nil {
-				// Log but continue.
+				if e.log != nil {
+					e.log.WithError(err).WithField("connection_id", connectionID).Error("emos: ice_failure evaluation")
+				}
 				continue
 			}
 			allObservations = append(allObservations, obs...)
@@ -108,7 +113,12 @@ func (e *ObservationEngine) EvaluateConnection(
 	// 4. Deduplicate and insert into events table.
 	for _, obs := range allObservations {
 		if err := e.insertObservationIfNew(ctx, connectionID, obs); err != nil {
-			// Log but continue on error (non-blocking).
+			if e.log != nil {
+				e.log.WithError(err).WithFields(logrus.Fields{
+					"connection_id": connectionID,
+					"rule":          obs.RuleName,
+				}).Error("emos: insert observation")
+			}
 			continue
 		}
 	}

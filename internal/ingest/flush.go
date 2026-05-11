@@ -27,7 +27,10 @@ import (
 	"github.com/RTCMon/rtcmon/internal/model"
 )
 
-const ewmaAlpha = 0.2
+const (
+	ewmaAlpha   = 0.2
+	ewmaStateTTL = time.Hour
+)
 
 // ewmaState holds the running EWMA values for one connection.
 type ewmaState struct {
@@ -36,6 +39,7 @@ type ewmaState struct {
 	RTTMs          float64
 	BitrateIn      float64
 	BitrateOut     float64
+	lastSeen       time.Time
 }
 
 func (s *ewmaState) update(raw model.StatSnapshot) {
@@ -44,6 +48,7 @@ func (s *ewmaState) update(raw model.StatSnapshot) {
 	s.RTTMs = ewmaAlpha*raw.RTTMs + (1-ewmaAlpha)*s.RTTMs
 	s.BitrateIn = ewmaAlpha*raw.BitrateInKbps + (1-ewmaAlpha)*s.BitrateIn
 	s.BitrateOut = ewmaAlpha*raw.BitrateOutKbps + (1-ewmaAlpha)*s.BitrateOut
+	s.lastSeen = time.Now()
 }
 
 func newEWMA(raw model.StatSnapshot) *ewmaState {
@@ -53,6 +58,7 @@ func newEWMA(raw model.StatSnapshot) *ewmaState {
 		RTTMs:          raw.RTTMs,
 		BitrateIn:      raw.BitrateInKbps,
 		BitrateOut:     raw.BitrateOutKbps,
+		lastSeen:       time.Now(),
 	}
 }
 
@@ -342,6 +348,14 @@ func (f *Flusher) buildStatRows(
 ) [][]any {
 	f.ewmaMu.Lock()
 	defer f.ewmaMu.Unlock()
+
+	// Evict stale EWMA entries to prevent unbounded map growth.
+	cutoff := time.Now().Add(-ewmaStateTTL)
+	for k, s := range f.ewmaState {
+		if s.lastSeen.Before(cutoff) {
+			delete(f.ewmaState, k)
+		}
+	}
 
 	var rows [][]any
 	for _, p := range batch {

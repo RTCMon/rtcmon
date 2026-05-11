@@ -14,6 +14,7 @@ import (
 	httpSwagger "github.com/swaggo/http-swagger/v2"
 
 	"github.com/RTCMon/rtcmon/internal/auth"
+	"github.com/RTCMon/rtcmon/internal/metrics"
 	"github.com/RTCMon/rtcmon/internal/ratelimit"
 	_ "github.com/RTCMon/rtcmon/services/ingest-api/docs"
 	"github.com/RTCMon/rtcmon/services/ingest-api/handler"
@@ -121,12 +122,24 @@ func loggingMiddleware(log *logrus.Logger) func(next http.Handler) http.Handler 
 			next.ServeHTTP(ww, r)
 
 			duration := time.Since(start).Milliseconds()
+			status := ww.Status()
+
+			var statusClass string
+			switch {
+			case status >= 500:
+				statusClass = "5xx"
+			case status >= 400:
+				statusClass = "4xx"
+			default:
+				statusClass = "2xx"
+			}
+			metrics.IngestRequestsTotal.WithLabelValues(statusClass).Inc()
 
 			log.WithFields(logrus.Fields{
 				"request_id":  requestID,
 				"method":      r.Method,
 				"path":        r.RequestURI,
-				"status":      ww.Status(),
+				"status":      status,
 				"duration_ms": duration,
 			}).Info("request completed")
 		})

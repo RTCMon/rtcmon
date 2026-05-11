@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/RTCMon/rtcmon/internal/metrics"
 )
 
 // StatRow represents one connection_stats sample (ordered by ts).
@@ -279,5 +281,6 @@ func (e *ObservationEngine) insertObservationIfNew(ctx context.Context, connecti
 		return fmt.Errorf("emos: insert observation: %w", err)
 	}
 
+	metrics.ObservationsTriggeredTotal.WithLabelValues(obs.RuleName).Inc()
 	return nil
 }

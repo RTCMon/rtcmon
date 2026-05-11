@@ -8,29 +8,28 @@ import (
 	"os"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 
+	"github.com/RTCMon/rtcmon/internal/metrics"
 	"github.com/RTCMon/rtcmon/internal/retention"
 	"github.com/RTCMon/rtcmon/internal/stale"
 	"github.com/RTCMon/rtcmon/internal/worker"
 )
 
-// serveWithShutdown starts httpSrv and blocks until a signal arrives on sigCh
-// or the server errors. On signal it:
+// serveWithShutdown starts httpSrv and a Prometheus metrics server, then
+// blocks until a signal arrives on sigCh or the main server errors. On signal:
 //  1. Drains in-flight HTTP requests (httpShutdownTimeout, typically 30s)
 //  2. Calls wp.Shutdown() to flush all buffered worker batches to DB
 //  3. Calls staleJob.Shutdown() to stop the stale-conference background job
 //  4. Calls retentionJob.Shutdown() to stop the data-retention cleanup job
 //  5. Closes emosCh to stop the eMOS goroutine cleanly
+//  6. Stops the metrics server (5 s timeout)
 //
 // Returns nil on clean shutdown, non-nil on unexpected server startup error.
-//
-// Shutdown order is intentional: HTTP stops accepting new enqueues first, then
-// the worker pool flushes everything already buffered, then the stale job stops
-// (so its last eMOS triggers can still be queued), then the retention job stops,
-// then eMOS exits.
 func serveWithShutdown(
 	httpSrv *http.Server,
+	metricsPort int,
 	wp *worker.Pool,
 	staleJob *stale.Job,
 	retentionJob *retention.Job,
@@ -39,6 +38,20 @@ func serveWithShutdown(
 	httpShutdownTimeout time.Duration,
 	log *logrus.Logger,
 ) error {
+	// Start the internal metrics server on metricsPort.
+	metricsMux := http.NewServeMux()
+	metricsMux.Handle("/metrics", promhttp.HandlerFor(metrics.Registry, promhttp.HandlerOpts{}))
+	metricsSrv := &http.Server{
+		Addr:    fmt.Sprintf(":%d", metricsPort),
+		Handler: metricsMux,
+	}
+	go func() {
+		if err := metricsSrv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) && err != nil {
+			log.WithError(err).Warn("ingest-api: metrics server error")
+		}
+	}()
+	log.WithField("port", metricsPort).Info("ingest-api: metrics server listening")
+
 	errCh := make(chan error, 1)
 	go func() {
 		if err := httpSrv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
@@ -77,6 +90,13 @@ func serveWithShutdown(
 
 	// Step 5: stop the eMOS goroutine.
 	close(emosCh)
+
+	// Step 6: stop the metrics server.
+	mCtx, mCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer mCancel()
+	if err := metricsSrv.Shutdown(mCtx); err != nil {
+		log.WithError(err).Warn("ingest-api: metrics server forced close")
+	}
 
 	log.Info("ingest-api: shutdown complete")
 	return nil

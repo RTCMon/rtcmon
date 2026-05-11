@@ -12,6 +12,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	"github.com/RTCMon/rtcmon/internal/metrics"
 	"github.com/RTCMon/rtcmon/internal/model"
 )
 
@@ -80,6 +81,7 @@ func (p *Pool) Enqueue(payload model.IngestPayload) error {
 
 	select {
 	case p.ch <- payload:
+		metrics.IngestChannelDepth.Set(float64(len(p.ch)))
 		return nil
 	default:
 		return ErrChannelFull
@@ -133,6 +135,20 @@ func (p *Pool) run() {
 }
 
 func (p *Pool) doFlush(batch []model.IngestPayload) {
-	p.log.WithField("batch_size", len(batch)).Debug("worker: flushing batch")
+	start := time.Now()
 	p.flushFn(context.Background(), batch)
+	dur := time.Since(start)
+
+	size := len(batch)
+	metrics.WorkerFlushDuration.Observe(dur.Seconds())
+	metrics.WorkerFlushBatchSize.Observe(float64(size))
+	metrics.IngestChannelDepth.Set(float64(len(p.ch)))
+
+	if p.log != nil {
+		p.log.WithFields(logrus.Fields{
+			"batch_size":  size,
+			"duration_ms": dur.Milliseconds(),
+			"channel_depth": len(p.ch),
+		}).Info("worker: flushed batch")
+	}
 }

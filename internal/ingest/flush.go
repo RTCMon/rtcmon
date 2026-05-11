@@ -23,6 +23,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
 
+	"github.com/RTCMon/rtcmon/internal/metrics"
 	"github.com/RTCMon/rtcmon/internal/model"
 )
 
@@ -174,6 +175,7 @@ func (f *Flusher) upsertConferences(
 		seen[k] = true
 
 		var dbID int64
+		var isNew bool
 		err = tx.QueryRow(ctx, `
 			WITH ins AS (
 				INSERT INTO conferences (app_id, external_id)
@@ -181,13 +183,16 @@ func (f *Flusher) upsertConferences(
 				ON CONFLICT (app_id, external_id) DO NOTHING
 				RETURNING id
 			)
-			SELECT id FROM ins
+			SELECT id, true  FROM ins
 			UNION ALL
-			SELECT id FROM conferences WHERE app_id = $1 AND external_id = $2
+			SELECT id, false FROM conferences WHERE app_id = $1 AND external_id = $2
 			LIMIT 1
-		`, appID, p.ConferenceID).Scan(&dbID)
+		`, appID, p.ConferenceID).Scan(&dbID, &isNew)
 		if err != nil {
 			return nil, fmt.Errorf("conference %q: %w", p.ConferenceID, err)
+		}
+		if isNew {
+			metrics.ConferencesTotal.WithLabelValues(p.AppID).Inc()
 		}
 		result[p.ConferenceID] = dbID
 	}

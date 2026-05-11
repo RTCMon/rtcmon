@@ -96,7 +96,7 @@ func TestGracefulShutdown_ExitCode(t *testing.T) {
 	sigCh := make(chan os.Signal, 1)
 	sendSignalAfter(sigCh, 20*time.Millisecond)
 
-	err := serveWithShutdown(httpSrv, wp, noopStaleJob(), noopRetentionJob(), emosCh, sigCh, time.Second, shutdownLog())
+	err := serveWithShutdown(httpSrv, 0, wp, noopStaleJob(), noopRetentionJob(), emosCh, sigCh, time.Second, shutdownLog())
 	if err != nil {
 		t.Errorf("want nil (exit 0), got: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestGracefulShutdown_NoNewRequests(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		serveWithShutdown(httpSrv, wp, noopStaleJob(), noopRetentionJob(), emosCh, sigCh, time.Second, shutdownLog()) //nolint:errcheck
+		serveWithShutdown(httpSrv, 0, wp, noopStaleJob(), noopRetentionJob(), emosCh, sigCh, time.Second, shutdownLog()) //nolint:errcheck
 	}()
 
 	// Wait until the server is actually accepting connections.
@@ -168,7 +168,7 @@ func TestGracefulShutdown_InFlightCompletes(t *testing.T) {
 	emosCh := noopEmosCh()
 	sigCh := make(chan os.Signal, 1)
 
-	go serveWithShutdown(httpSrv, wp, noopStaleJob(), noopRetentionJob(), emosCh, sigCh, 5*time.Second, shutdownLog()) //nolint:errcheck
+	go serveWithShutdown(httpSrv, 0, wp, noopStaleJob(), noopRetentionJob(), emosCh, sigCh, 5*time.Second, shutdownLog()) //nolint:errcheck
 
 	// Wait for server to be ready.
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
@@ -299,7 +299,7 @@ func TestGracefulShutdown_DrainChannel(t *testing.T) {
 		sigCh <- syscall.SIGTERM
 	}()
 
-	if err := serveWithShutdown(httpSrv, wp, noopStaleJob(), noopRetentionJob(), emosCh, sigCh, time.Second, shutdownLog()); err != nil {
+	if err := serveWithShutdown(httpSrv, 0, wp, noopStaleJob(), noopRetentionJob(), emosCh, sigCh, time.Second, shutdownLog()); err != nil {
 		t.Fatalf("serveWithShutdown: %v", err)
 	}
 

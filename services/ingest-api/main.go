@@ -179,7 +179,7 @@ func newServeCmd() *cobra.Command {
 				Addr:    fmt.Sprintf(":%d", cfg.Server.Port),
 				Handler: srv,
 			}
-			return serveWithShutdown(httpSrv, wp, staleJob, retentionJob, emosCh, sigCh, 30*time.Second, log)
+			return serveWithShutdown(httpSrv, cfg.Server.MetricsPort, wp, staleJob, retentionJob, emosCh, sigCh, 30*time.Second, log)
 		},
 	}
 }

@@ -9,6 +9,7 @@ WORKDIR /build
 COPY go.mod go.sum ./
 
 # Copy source code
+COPY migrations ./migrations
 COPY internal ./internal
 COPY services/ingest-api ./services/ingest-api
 

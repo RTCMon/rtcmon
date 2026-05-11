@@ -20,7 +20,7 @@ import (
 // @title Query API
 // @version 1.0
 // @description RTCMon Query API
-// @host localhost:8080
+// @host localhost:8081
 // @BasePath /
 
 func main() {

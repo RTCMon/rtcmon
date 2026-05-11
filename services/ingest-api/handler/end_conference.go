@@ -46,6 +46,17 @@ func resolveAppID(r *http.Request) (int64, error) {
 //  5. Fires the eMOS trigger asynchronously (non-blocking)
 //  6. Invalidates analytics cache keys for the app (fire-and-forget)
 //  7. Returns 202
+//
+// @Summary End Conference
+// @Description Ends a conference and triggers eMOS computation
+// @Tags v1
+// @Accept json
+// @Produce json
+// @Param conferenceID path string true "Conference ID"
+// @Success 202 {object} map[string]interface{}
+// @Failure 403 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Router /v1/conferences/{conferenceID}/end [post]
 func HandleEndConference(pool *pgxpool.Pool, rdb *redis.Client, log *logrus.Logger, triggerEMOS EMOSTriggerFn) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		externalID := chi.URLParam(r, "conferenceID")

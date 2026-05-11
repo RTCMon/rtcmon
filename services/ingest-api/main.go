@@ -30,7 +30,7 @@ import (
 // @title Ingest API
 // @version 1.0
 // @description RTCMon Ingest API
-// @host localhost:8081
+// @host localhost:8080
 // @BasePath /
 
 func main() {

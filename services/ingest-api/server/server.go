@@ -11,9 +11,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
+	httpSwagger "github.com/swaggo/http-swagger/v2"
 
 	"github.com/RTCMon/rtcmon/internal/auth"
 	"github.com/RTCMon/rtcmon/internal/ratelimit"
+	_ "github.com/RTCMon/rtcmon/services/ingest-api/docs"
 	"github.com/RTCMon/rtcmon/services/ingest-api/handler"
 )
 
@@ -72,6 +74,7 @@ func (s *Server) setupMiddleware() {
 func (s *Server) setupRoutes() {
 	// Public routes — no auth required.
 	s.router.Get("/health", handler.HandleHealth(s.db, s.redis, s.log))
+	s.router.Get("/swagger/*", httpSwagger.Handler())
 
 	// JWT-authenticated routes.
 	s.router.Group(func(r chi.Router) {

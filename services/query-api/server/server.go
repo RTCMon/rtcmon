@@ -11,8 +11,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
+	httpSwagger "github.com/swaggo/http-swagger/v2"
 
 	"github.com/RTCMon/rtcmon/internal/session"
+	_ "github.com/RTCMon/rtcmon/services/query-api/docs"
 	"github.com/RTCMon/rtcmon/services/query-api/handler"
 )
 
@@ -61,6 +63,7 @@ func (s *Server) setupMiddleware() {
 func (s *Server) setupRoutes() {
 	// Public routes.
 	s.router.Get("/health", handler.HandleHealth(s.db, s.redis, s.log))
+	s.router.Get("/swagger/*", httpSwagger.Handler())
 
 	// Auth endpoints — session creation/destruction (no session required).
 	s.router.Post("/auth/register", handler.HandleRegister(s.db, s.sessions, s.log))
